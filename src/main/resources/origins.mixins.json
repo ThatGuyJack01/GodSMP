@@ -9,6 +9,7 @@
         "LikeWaterMixin",
         "NoCobwebSlowdownMixin",
         "OriginUpgradeMixin",
+        "OriginLayersMixin",
         "ScareCreepersMixin",
         "SelectionInvulnerabilityMixin",
         "WaterBreathingMixin$CanBreatheInWater",
