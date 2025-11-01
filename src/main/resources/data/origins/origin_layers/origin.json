@@ -15,6 +15,7 @@
     "origins:shulk",
     "origins:test"
   ],
+  "default_origin": "origins:human",
   "allow_random": false,
   "exclude_random": [
     "origins:human"
