@@ -2,8 +2,11 @@ package io.github.apace100.origins;
 
 import io.github.apace100.apoli.ApoliClient;
 import io.github.apace100.apoli.integration.PowerClearCallback;
+import io.github.apace100.origins.component.OriginComponent;
 import io.github.apace100.origins.networking.ModPacketsS2C;
+import io.github.apace100.origins.origin.Origin;
 import io.github.apace100.origins.registry.ModBlocks;
+import io.github.apace100.origins.registry.ModComponents;
 import io.github.apace100.origins.registry.ModEntities;
 import io.github.apace100.origins.screen.ViewOriginScreen;
 import io.github.apace100.origins.util.PowerKeyManager;
@@ -56,9 +59,18 @@ public class OriginsClient implements ClientModInitializer {
 
         ClientTickEvents.START_CLIENT_TICK.register(tick -> {
             while(viewCurrentOriginKeybind.wasPressed()) {
-                if(!(MinecraftClient.getInstance().currentScreen instanceof ViewOriginScreen)) {
-                    MinecraftClient.getInstance().setScreen(new ViewOriginScreen());
-                }
+                MinecraftClient client = MinecraftClient.getInstance();
+                if(!(client.currentScreen instanceof ViewOriginScreen))
+                    if (client.player == null) continue;
+
+                OriginComponent component = ModComponents.ORIGIN.get(client.player);
+                boolean isHuman = component.getOrigins().values().stream()
+                        .filter(origin -> origin != null && origin != Origin.EMPTY)
+                        .anyMatch(origin -> origin.getIdentifier().equals(Origins.identifier("human")));
+
+                if(isHuman) continue;
+
+                client.setScreen(new ViewOriginScreen());
             }
         });
 
