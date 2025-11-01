@@ -96,8 +96,6 @@ public class Origins implements ModInitializer, OrderedResourceListenerInitializ
 		Criteria.register(ChoseOriginCriterion.ID.toString(), ChoseOriginCriterion.INSTANCE);
 		Registry.register(Registries.LOOT_CONDITION_TYPE, identifier("origin"), OriginLootCondition.TYPE);
 
-		DefaultOriginAssigner.register();
-
 		ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> ModComponents.ORIGIN.get(handler.player).selectingOrigin(false));
 	}
 
