@@ -3,7 +3,6 @@ package io.github.apace100.origins.power;
 import io.github.apace100.apoli.power.PowerType;
 import io.github.apace100.apoli.power.PowerTypeReference;
 import io.github.apace100.apoli.power.factory.PowerFactory;
-import io.github.apace100.apoli.power.factory.PowerFactorySupplier;
 import io.github.apace100.apoli.registry.ApoliRegistries;
 import io.github.apace100.origins.Origins;
 import io.github.apace100.origins.power.PortableJukeboxPower;
@@ -21,16 +20,12 @@ public class OriginsPowerTypes {
     public static final PowerType<PortableJukeboxPower> PORTABLE_JUKEBOX = new PowerTypeReference<>(Origins.identifier("portable_jukebox"));
 
     public static void register() {
-        register(OriginsCallbackPower::createFactory);
-        register(PortableJukeboxPower::createFactory);
+        register(OriginsCallbackPower.createFactory());
+        register(PortableJukeboxPower.createFactory());
     }
 
     private static void register(PowerFactory<?> serializer) {
         Registry.register(ApoliRegistries.POWER_FACTORY, serializer.getSerializerId(), serializer);
-    }
-
-    private static void register(PowerFactorySupplier<?> supplier) {
-        register(supplier.createFactory());
     }
 
 }
