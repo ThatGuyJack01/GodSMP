@@ -40,7 +40,8 @@
   ],
   "custom": {
     "cardinal-components": [
-      "origins:origin"
+      "origins:origin",
+      "origins:portable_jukebox"
     ]
   },
 
