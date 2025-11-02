@@ -29,6 +29,9 @@
   "origin.origins.shulk.name": "Shulk",
   "origin.origins.shulk.description": "Related to Shulkers, the bodies of the Shulk are outfitted with a protective shell-like skin.",
 
+  "origin.origins.conductor.name" : "Conductor",
+  "origin.origins.conductor.description": "[Placeholder]",
+
   "power.origins.water_breathing.name": "Gills",
   "power.origins.water_breathing.description": "You can breathe underwater, but not on land.",
 
@@ -176,6 +179,9 @@
   "power.origins.velvet_paws.name": "Velvet Paws",
   "power.origins.velvet_paws.description": "Your footsteps don't cause any vibrations which could otherwise be picked up by nearby lifeforms.",
 
+  "power.origins.portable_jukebox.name": "[Placeholder]",
+  "power.origins.portable_jukebox.description": "[Placeholder]",
+
   "category.origins": "Origins",
   "key.origins.primary_active": "Active Power (Primary)",
   "key.origins.secondary_active": "Active Power (Secondary)",
@@ -194,6 +200,9 @@
   "enchantment.origins.water_protection.desc": "Delays damage from hydrophobia.",
 
   "container.shulker_inventory_power": "Shulker Inventory",
+
+  "container.origins.portable_jukebox": "Portable Jukebox",
+  "inventory.origins.portable_jukebox": "Portable Jukebox",
 
   "origins.gui.select": "Select",
   "origins.gui.close": "Close",

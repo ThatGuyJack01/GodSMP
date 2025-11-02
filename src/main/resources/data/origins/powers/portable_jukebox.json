@@ -1,0 +1,5 @@
+{
+  "type": "origins:portable_jukebox",
+  "exhaustion_interval": 20,
+  "exhaustion_amount": 0.05
+}

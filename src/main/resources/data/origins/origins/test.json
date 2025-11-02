@@ -2,15 +2,7 @@
 	"icon": {
 		"item": "minecraft:red_wool"
 	},
-	"powers": [
-		"origins:climbing",
-		"origins:throw_ender_pearl",
-		"origins:water_vulnerability",
-		"origins:pumpkin_hate",
-		"origins:extra_reach",
-		"origins:ender_particles",
-		"origins:damage_from_potions"
-	],
+	"powers": [],
 	"order": 1,
 	"impact": 0
 }

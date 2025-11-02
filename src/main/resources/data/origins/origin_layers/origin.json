@@ -13,7 +13,8 @@
     "origins:merling",
     "origins:phantom",
     "origins:shulk",
-    "origins:test"
+    "origins:test",
+    "origins:conductor"
   ],
   "default_origin": "origins:human",
   "allow_random": false,

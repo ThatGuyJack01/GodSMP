@@ -9,15 +9,19 @@ import io.github.apace100.apoli.component.PowerHolderComponent;
 import io.github.apace100.origins.Origins;
 import io.github.apace100.origins.component.OriginComponent;
 import io.github.apace100.origins.component.PlayerOriginComponent;
+import io.github.apace100.origins.component.PlayerPortableJukeboxComponent;
+import io.github.apace100.origins.component.PortableJukeboxComponent;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.util.Identifier;
 
 public class ModComponents implements EntityComponentInitializer {
 
     public static final ComponentKey<OriginComponent> ORIGIN;
+    public static final ComponentKey<PortableJukeboxComponent> PORTABLE_JUKEBOX;
 
     static {
         ORIGIN = ComponentRegistry.getOrCreate(new Identifier(Origins.MODID, "origin"), OriginComponent.class);
+        PORTABLE_JUKEBOX = ComponentRegistry.getOrCreate(new Identifier(Origins.MODID, "portable_jukebox"), PortableJukeboxComponent.class);
     }
 
     public static void register() {}
@@ -28,6 +32,10 @@ public class ModComponents implements EntityComponentInitializer {
             .after(PowerHolderComponent.KEY)
             .respawnStrategy(RespawnCopyStrategy.CHARACTER)
             .end(PlayerOriginComponent::new);
+
+        registry.beginRegistration(PlayerEntity.class, PORTABLE_JUKEBOX)
+            .respawnStrategy(RespawnCopyStrategy.ALWAYS_COPY)
+            .end(PlayerPortableJukeboxComponent::new);
     }
 
 }

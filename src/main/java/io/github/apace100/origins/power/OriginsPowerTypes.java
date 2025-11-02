@@ -6,6 +6,7 @@ import io.github.apace100.apoli.power.factory.PowerFactory;
 import io.github.apace100.apoli.power.factory.PowerFactorySupplier;
 import io.github.apace100.apoli.registry.ApoliRegistries;
 import io.github.apace100.origins.Origins;
+import io.github.apace100.origins.power.PortableJukeboxPower;
 import net.minecraft.registry.Registry;
 
 public class OriginsPowerTypes {
@@ -17,9 +18,11 @@ public class OriginsPowerTypes {
     public static final PowerType<?> NO_COBWEB_SLOWDOWN = new PowerTypeReference<>(Origins.identifier("no_cobweb_slowdown"));
     public static final PowerType<?> MASTER_OF_WEBS_NO_SLOWDOWN = new PowerTypeReference<>(Origins.identifier("master_of_webs_no_slowdown"));
     public static final PowerType<?> CONDUIT_POWER_ON_LAND = new PowerTypeReference<>(Origins.identifier("conduit_power_on_land"));
+    public static final PowerType<PortableJukeboxPower> PORTABLE_JUKEBOX = new PowerTypeReference<>(Origins.identifier("portable_jukebox"));
 
     public static void register() {
         register(OriginsCallbackPower::createFactory);
+        register(PortableJukeboxPower::createFactory);
     }
 
     private static void register(PowerFactory<?> serializer) {

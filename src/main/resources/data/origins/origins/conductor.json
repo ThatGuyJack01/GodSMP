@@ -1,0 +1,10 @@
+{
+	"icon": {
+		"item": "minecraft:jukebox"
+	},
+	"powers": [
+      "origins:portable_jukebox"
+	],
+	"order": 6,
+	"impact": 1
+}
