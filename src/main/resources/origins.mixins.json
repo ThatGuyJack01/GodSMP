@@ -6,6 +6,7 @@
   "mixins": [
     "ArgumentTypesMixin",
     "ConduitOnLandMixin",
+    "JukeboxBlockEntityMixin",
     "LikeWaterMixin",
     "NoCobwebSlowdownMixin",
     "OriginUpgradeMixin",
