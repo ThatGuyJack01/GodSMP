@@ -132,10 +132,42 @@ public final class MusicAuraManager {
         return heard;
     }
 
-    private static void applyEffects(ServerPlayerEntity player, DiscRules.DiscRule rule) {
-        for(StatusEffectInstance effect :rule.effects()) {
-            player.addStatusEffect(new StatusEffectInstance(effect));
+    private static void applyEffects(ServerPlayerEntity holder, DiscRules.DiscRule rule) {
+        List<ServerPlayerEntity> recipients = resolveRecipients(holder, rule);
+        if (recipients.isEmpty()) {
+            return;
         }
+        for (ServerPlayerEntity target : recipients) {
+            for (StatusEffectInstance effect : rule.effects()) {
+                target.addStatusEffect(new StatusEffectInstance(effect));
+            }
+        }
+    }
+
+    private static List<ServerPlayerEntity> resolveRecipients(ServerPlayerEntity holder, DiscRules.DiscRule rule) {
+        DiscRules.Target target = rule.target();
+        if (target == DiscRules.Target.SELF) {
+            return Collections.singletonList(holder);
+        }
+        MinecraftServer server = holder.getServer();
+        if (server == null) {
+            return Collections.emptyList();
+        }
+        double rangeSq = rule.range() * rule.range();
+        List<ServerPlayerEntity> recipients = new ArrayList<>();
+        for (ServerPlayerEntity candidate : server.getPlayerManager().getPlayerList()) {
+            if (candidate == null || candidate.getWorld() != holder.getWorld()) {
+                continue;
+            }
+            if (candidate.squaredDistanceTo(holder) > rangeSq) {
+                continue;
+            }
+            if (target == DiscRules.Target.ALL_EXCLUDE_SELF && candidate.getUuid().equals(holder.getUuid())) {
+                continue;
+            }
+            recipients.add(candidate);
+        }
+        return recipients;
     }
 
     private static String describe(Set<MusicSource> sources) {
