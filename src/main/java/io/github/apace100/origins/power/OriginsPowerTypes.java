@@ -18,10 +18,12 @@ public class OriginsPowerTypes {
     public static final PowerType<?> MASTER_OF_WEBS_NO_SLOWDOWN = new PowerTypeReference<>(Origins.identifier("master_of_webs_no_slowdown"));
     public static final PowerType<?> CONDUIT_POWER_ON_LAND = new PowerTypeReference<>(Origins.identifier("conduit_power_on_land"));
     public static final PowerType<PortableJukeboxPower> PORTABLE_JUKEBOX = new PowerTypeReference<>(Origins.identifier("portable_jukebox"));
+    public static final PowerType<PortableJukeboxPower> MUSIC_AURA = new PowerTypeReference<>(MusicAuraPower.ID);
 
     public static void register() {
         register(OriginsCallbackPower.createFactory());
         register(PortableJukeboxPower.createFactory());
+        register(MusicAuraPower.createFactory());
     }
 
     private static void register(PowerFactory<?> serializer) {

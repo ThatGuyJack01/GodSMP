@@ -179,8 +179,11 @@
   "power.origins.velvet_paws.name": "Velvet Paws",
   "power.origins.velvet_paws.description": "Your footsteps don't cause any vibrations which could otherwise be picked up by nearby lifeforms.",
 
-  "power.origins.portable_jukebox.name": "[Placeholder]",
-  "power.origins.portable_jukebox.description": "[Placeholder]",
+  "power.origins.portable_jukebox.name": "AUX",
+  "power.origins.portable_jukebox.description": "Your very own MP3 Player!",
+
+  "power.origins.music_aura.name": "Music Aura [Placeholder]",
+  "power.origins.music_aura.description": "[Placeholder]",
 
   "category.origins": "Origins",
   "key.origins.primary_active": "Active Power (Primary)",

@@ -11,6 +11,8 @@ import io.github.apace100.calio.resource.OrderedResourceListenerInitializer;
 import io.github.apace100.calio.resource.OrderedResourceListenerManager;
 import io.github.apace100.origins.badge.BadgeManager;
 import io.github.apace100.origins.command.OriginCommand;
+import io.github.apace100.origins.music.DiscRules;
+import io.github.apace100.origins.music.MusicAuraManager;
 import io.github.apace100.origins.networking.ModPacketsC2S;
 import io.github.apace100.origins.origin.Origin;
 import io.github.apace100.origins.origin.OriginLayers;
@@ -25,6 +27,7 @@ import me.shedaniel.autoconfig.annotation.Config;
 import me.shedaniel.autoconfig.serializer.ConfigSerializer;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.resource.IdentifiableResourceReloadListener;
@@ -88,12 +91,14 @@ public class Origins implements ModInitializer, OrderedResourceListenerInitializ
 		ModEntities.register();
 		ModLoot.registerLootTables();
 		ModComponents.register();
+        DiscRules.bootstrap();
 		Origin.init();
 
 		CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> OriginCommand.register(dispatcher));
 		ItemGroupEvents.modifyEntriesEvent(ItemGroups.TOOLS).register((content) -> content.add(ModItems.ORB_OF_ORIGIN));
 
 		Criteria.register(ChoseOriginCriterion.ID.toString(), ChoseOriginCriterion.INSTANCE);
+        ServerTickEvents.END_SERVER_TICK.register(MusicAuraManager::tick);
 		Registry.register(Registries.LOOT_CONDITION_TYPE, identifier("origin"), OriginLootCondition.TYPE);
 
 		ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> ModComponents.ORIGIN.get(handler.player).selectingOrigin(false));
