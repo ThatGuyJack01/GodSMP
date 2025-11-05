@@ -13,7 +13,6 @@ import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
-import org.apache.logging.log4j.core.jmx.Server;
 
 import java.lang.reflect.Method;
 import java.util.*;
@@ -134,32 +133,9 @@ public final class MusicAuraManager {
     }
 
     private static void applyEffects(ServerPlayerEntity player, DiscRules.DiscRule rule) {
-        List<ServerPlayerEntity> recipients = resolveRecipients(player, rule);
-        if(recipients.isEmpty()) return;
-        for(ServerPlayerEntity target : recipients) {
-            for(StatusEffectInstance effect :rule.effects()) {
-                target.addStatusEffect(new StatusEffectInstance(effect));
-            }
+        for(StatusEffectInstance effect :rule.effects()) {
+            player.addStatusEffect(new StatusEffectInstance(effect));
         }
-    }
-
-    private static List<ServerPlayerEntity> resolveRecipients(ServerPlayerEntity player, DiscRules.DiscRule rule) {
-        DiscRules.Target target = rule.target();
-        if(target == DiscRules.Target.SELF) {
-            return Collections.singletonList(player);
-        }
-        MinecraftServer server = player.getServer();
-        if(server == null) return Collections.emptyList();
-
-        double rangeSq = rule.range() * rule.range();
-        List<ServerPlayerEntity> recipients = new ArrayList<>();
-        for(ServerPlayerEntity candidate : server.getPlayerManager().getPlayerList()) {
-            if(candidate == null || candidate.getWorld() != player.getWorld()) continue;
-            if(candidate.squaredDistanceTo(player) > rangeSq) continue;
-            if(target == DiscRules.Target.ALL_EXCLUDE_SELF && candidate.getUuid().equals(player.getUuid())) continue;
-            recipients.add(candidate);
-        }
-        return recipients;
     }
 
     private static String describe(Set<MusicSource> sources) {
