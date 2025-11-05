@@ -19,27 +19,26 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(InventoryScreen.class)
 public abstract class InventoryScreenMixin extends AbstractInventoryScreen<PlayerScreenHandler> {
-
-    private static final Identifier INVENTORY_TEXTURE = new Identifier("textures/gui/container/inventory.png");
+    private static final Identifier INVENTORY_TEXTURE = new Identifier("minecraft", "textures/gui/sprites/container/slot.png");
+    private static final Identifier DISC_SLOT_TEXTURE = new Identifier("origins", "textures/item/empty_slot_disc.png");
     // new Identifier("minecraft", "textures/gui/sprites/container/slot.png");
 
     protected InventoryScreenMixin(PlayerScreenHandler handler, PlayerInventory inventory, Text title) {
         super(handler, inventory, title);
     }
 
-    @Inject(method = "drawBackground", at = @At("TAIL"))
+    @Inject(method = "drawBackground", at = @At("RETURN"))
     private void origins$drawPortableJukeboxSlot(DrawContext context, float delta, int mouseX, int mouseY, CallbackInfo ci) {
         PlayerEntity player = MinecraftClient.getInstance().player;
         if (player == null) {
             return;
         }
 
-        if (!PowerHolderComponent.KEY.get(player).hasPower(OriginsPowerTypes.PORTABLE_JUKEBOX)) {
-            return;
-        }
+        if (!PowerHolderComponent.KEY.get(player).hasPower(OriginsPowerTypes.PORTABLE_JUKEBOX)) return;
 
         int slotX = this.x + PortableJukeboxSlot.SLOT_X - 1;
         int slotY = this.y + PortableJukeboxSlot.SLOT_Y - 1;
-        context.drawTexture(INVENTORY_TEXTURE, slotX, slotY, 0, this.backgroundHeight, 18, 18);
+        context.drawTexture(INVENTORY_TEXTURE, slotX, slotY, 0, 0, 18, 18, 18, 18);
+        context.drawTexture(DISC_SLOT_TEXTURE, slotX+1, slotY+1, 0, 0, 16, 16, 16, 16);
     }
 }

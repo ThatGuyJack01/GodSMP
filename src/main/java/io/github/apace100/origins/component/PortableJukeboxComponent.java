@@ -12,4 +12,6 @@ public interface PortableJukeboxComponent extends AutoSyncedComponent, CopyableC
     void dropAll();
     void clear();
     void sync();
+
+    boolean isPlaying();
 }

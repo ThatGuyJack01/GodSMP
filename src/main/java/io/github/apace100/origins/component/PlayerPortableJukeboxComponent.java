@@ -11,9 +11,11 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.item.MusicDiscItem;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.registry.tag.ItemTags;
+import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvent;
 import net.minecraft.util.collection.DefaultedList;
+import net.minecraft.network.packet.s2c.play.StopSoundS2CPacket;
 
 public class PlayerPortableJukeboxComponent implements PortableJukeboxComponent {
     private final PlayerEntity player;
@@ -122,6 +124,12 @@ public class PlayerPortableJukeboxComponent implements PortableJukeboxComponent 
     }
 
     @Override
+    public boolean isPlaying() {
+        ItemStack stack = getDisc();
+        return !stack.isEmpty();
+    }
+
+    @Override
     public void copyFrom(PortableJukeboxComponent other) {
         discInventory.set(0, other.getDisc().copy());
         playCooldown = 0;
@@ -141,6 +149,7 @@ public class PlayerPortableJukeboxComponent implements PortableJukeboxComponent 
 
         if(power==null) {
             if(!stack.isEmpty()) {
+                stopCurrentRecord();
                 player.dropItem(stack.copy(), false);
                 discInventory.set(0, ItemStack.EMPTY);
                 sync();
@@ -152,6 +161,7 @@ public class PlayerPortableJukeboxComponent implements PortableJukeboxComponent 
 
         if(!(stack.getItem() instanceof MusicDiscItem disc)) {
             if(!stack.isEmpty()) {
+                stopCurrentRecord();
                 player.dropItem(stack.copy(), false);
                 discInventory.set(0, ItemStack.EMPTY);
                 sync();
@@ -162,6 +172,7 @@ public class PlayerPortableJukeboxComponent implements PortableJukeboxComponent 
         }
 
         if(stack.isEmpty()) {
+            stopCurrentRecord();
             playCooldown = 0;
             exhaustionTicker = 0;
             return;
@@ -170,10 +181,16 @@ public class PlayerPortableJukeboxComponent implements PortableJukeboxComponent 
         if(playCooldown-- <= 0) {
             SoundEvent sound = disc.getSound();
             if(sound != null) {
-                player.getWorld().playSound(null, player.getX(), player.getY(), player.getZ(), sound, SoundCategory.RECORDS, 4.0F, 1.0F);
+                ServerWorld world = (ServerWorld)player.getWorld();
+                world.playSoundFromEntity(null, player, sound, SoundCategory.PLAYERS, 4.0F, 1.0F);
             }
             playCooldown = PortableJukeboxHelper.getPlaybackInterval(disc);
         }
+        
+//        if(playCooldown >= PortableJukeboxHelper.getPlaybackInterval(disc) - 1)
+//        {
+//            System.out.println("Song Finished?");
+//        }
 
         exhaustionTicker++;
         if(exhaustionTicker >= power.getExhaustionInterval()) {
@@ -204,8 +221,28 @@ public class PlayerPortableJukeboxComponent implements PortableJukeboxComponent 
             }
             discInventory.set(0, ItemStack.EMPTY);
         }
+
+        if(stack.isEmpty())
+            stopCurrentRecord();
+
         playCooldown = 0;
         exhaustionTicker = 0;
         sync();
+    }
+
+    private void stopCurrentRecord() {
+        if(player.getWorld().isClient) return;
+        StopSoundS2CPacket pkt = new StopSoundS2CPacket(null, SoundCategory.PLAYERS);
+
+        player.getServer().getPlayerManager().sendToAround(
+                null,
+                player.getX(), player.getY(), player.getZ(),
+                64.0D,
+                player.getWorld().getRegistryKey(),
+                pkt
+        );
+
+        playCooldown = 0;
+        exhaustionTicker = 0;
     }
 }

@@ -14,7 +14,7 @@
     "origins:phantom",
     "origins:shulk",
     "origins:test",
-    "origins:conductor"
+    "origins:composer"
   ],
   "default_origin": "origins:human",
   "allow_random": false,
