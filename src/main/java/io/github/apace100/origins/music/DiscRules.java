@@ -14,10 +14,12 @@ import java.util.Optional;
 public final class DiscRules {
     public static final class DiscRule {
         private final double range;
+        private final Target target;
         private final List<StatusEffectInstance> effects;
 
-        private DiscRule(double range, List<StatusEffectInstance> effects) {
+        private DiscRule(double range, Target target, List<StatusEffectInstance> effects) {
             this.range = range;
+            this.target = target;
             this.effects = effects;
         }
 
@@ -25,9 +27,19 @@ public final class DiscRules {
             return range;
         }
 
+        public Target target() {
+            return target;
+        }
+
         public List<StatusEffectInstance> effects() {
             return effects;
         }
+    }
+
+    public enum Target {
+        SELF,
+        ALL_EXCLUDE_SELF,
+        ALL
     }
 
     private static final Map<Identifier, DiscRule> RULES = new HashMap<>();
@@ -36,17 +48,17 @@ public final class DiscRules {
 
     public static void bootstrap() {
         RULES.clear();
-        register(new Identifier("minecraft", "music_disc.cat"), 64.0D,
+        register(new Identifier("minecraft", "music_disc.cat"), 64.0D, Target.SELF,
                 new StatusEffectInstance(StatusEffects.SPEED, 60, 0, false, true, true));
-        register(new Identifier("minecraft", "music_disc.ward"), 48.0D,
+        register(new Identifier("minecraft", "music_disc.ward"), 48.0D, Target.ALL_EXCLUDE_SELF,
                 new StatusEffectInstance(StatusEffects.STRENGTH, 60, 0, false, true, true));
     }
 
-    public static void register(Identifier soundId, double range, StatusEffectInstance... effects) {
-        if(soundId == null || range <= 0.0D || effects.length == 0) {
+    public static void register(Identifier soundId, double range, Target target, StatusEffectInstance... effects) {
+        if(soundId == null || range <= 0.0D || target == null || effects.length == 0) {
             return;
         }
-        RULES.put(soundId, new DiscRule(range, List.of(effects)));
+        RULES.put(soundId, new DiscRule(range, target, List.of(effects)));
     }
 
     public static Optional<DiscRule> get(Identifier soundId) {
