@@ -18,8 +18,8 @@
   ],
   "client": [
     "DrawContextAccessor",
-    "KeyBindingAccessor",
     "InventoryScreenMixin",
+    "KeyBindingAccessor",
     "ServerCheckMixin",
     "WaterVisibilityMixin"
   ],
