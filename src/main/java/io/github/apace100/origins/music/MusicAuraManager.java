@@ -162,7 +162,7 @@ public final class MusicAuraManager {
             if (candidate.squaredDistanceTo(holder) > rangeSq) {
                 continue;
             }
-            if (target == DiscRules.Target.ALL_EXCLUDE_SELF && candidate.getUuid().equals(holder.getUuid())) {
+            if (target == DiscRules.Target.OTHERS && candidate.getUuid().equals(holder.getUuid())) {
                 continue;
             }
             recipients.add(candidate);
