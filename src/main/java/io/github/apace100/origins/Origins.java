@@ -11,6 +11,7 @@ import io.github.apace100.calio.resource.OrderedResourceListenerInitializer;
 import io.github.apace100.calio.resource.OrderedResourceListenerManager;
 import io.github.apace100.origins.badge.BadgeManager;
 import io.github.apace100.origins.command.OriginCommand;
+import io.github.apace100.origins.command.PylonCommand;
 import io.github.apace100.origins.music.DiscRules;
 import io.github.apace100.origins.music.MusicAuraManager;
 import io.github.apace100.origins.networking.ModPacketsC2S;
@@ -84,6 +85,7 @@ public class Origins implements ModInitializer, OrderedResourceListenerInitializ
 		OriginsEntityConditions.register();
 
 		ModBlocks.register();
+        ModBlockEntities.register();
 		ModItems.register();
 		ModTags.register();
 		ModPacketsC2S.register();
@@ -94,7 +96,11 @@ public class Origins implements ModInitializer, OrderedResourceListenerInitializ
         DiscRules.bootstrap();
 		Origin.init();
 
-		CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> OriginCommand.register(dispatcher));
+		CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
+            OriginCommand.register(dispatcher);
+            PylonCommand.register(dispatcher);
+
+        });
 		ItemGroupEvents.modifyEntriesEvent(ItemGroups.TOOLS).register((content) -> content.add(ModItems.ORB_OF_ORIGIN));
 
 		Criteria.register(ChoseOriginCriterion.ID.toString(), ChoseOriginCriterion.INSTANCE);
