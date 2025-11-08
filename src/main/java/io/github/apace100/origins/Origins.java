@@ -22,6 +22,7 @@ import io.github.apace100.origins.power.OriginsEntityConditions;
 import io.github.apace100.origins.power.OriginsPowerTypes;
 import io.github.apace100.origins.registry.*;
 import io.github.apace100.origins.util.*;
+import io.github.apace100.server.PylonVisualizer;
 import me.shedaniel.autoconfig.AutoConfig;
 import me.shedaniel.autoconfig.ConfigData;
 import me.shedaniel.autoconfig.annotation.Config;
@@ -95,6 +96,7 @@ public class Origins implements ModInitializer, OrderedResourceListenerInitializ
 		ModComponents.register();
         DiscRules.bootstrap();
 		Origin.init();
+        PylonVisualizer.initServerHooks();
 
 		CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
             OriginCommand.register(dispatcher);

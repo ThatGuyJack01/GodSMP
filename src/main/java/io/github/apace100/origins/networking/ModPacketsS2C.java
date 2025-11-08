@@ -4,6 +4,7 @@ import io.github.apace100.origins.Origins;
 import io.github.apace100.origins.OriginsClient;
 import io.github.apace100.origins.badge.Badge;
 import io.github.apace100.origins.badge.BadgeManager;
+import io.github.apace100.origins.client.PylonRenderClient;
 import io.github.apace100.origins.component.OriginComponent;
 import io.github.apace100.origins.integration.OriginDataLoadedCallback;
 import io.github.apace100.origins.networking.packet.VersionHandshakePacket;
