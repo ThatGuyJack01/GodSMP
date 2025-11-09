@@ -4,11 +4,16 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
+import io.github.apace100.origins.content.PylonControllerBlockEntity;
 import io.github.apace100.origins.content.pylon.PylonArea;
+import io.github.apace100.origins.content.pylon.PylonControllerState;
 import io.github.apace100.origins.content.pylon.PylonState;
+import io.github.apace100.origins.content.pylon.PylonTopoEvent;
 import io.github.apace100.origins.networking.ModPackets;
 import io.github.apace100.server.PylonVisualizer;
+import io.netty.buffer.Unpooled;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.command.CommandManager;
@@ -41,11 +46,20 @@ public class PylonCommand {
                         )
                 )
                 .then(CommandManager.literal("clear").executes(PylonCommand::clearList))
-                    .then(CommandManager.literal("hullit")
+                    .then(CommandManager.literal("hullitall")
                         .then(CommandManager.argument("seconds", IntegerArgumentType.integer())
                             .executes(ctx -> sendHull(ctx, IntegerArgumentType.getInteger(ctx, "seconds"))))
                             .executes(ctx -> sendHull(ctx, 5)
                     )
+                )
+                .then(CommandManager.literal("hull").executes(ctx -> hullFromNearest(ctx, 5)))
+                .then(CommandManager.literal("hull")
+                        .then(CommandManager.argument("seconds", IntegerArgumentType.integer(1, 60))
+                                .executes(ctx -> hullFromNearest(ctx, IntegerArgumentType.getInteger(ctx, "seconds")))
+                        )
+                )
+                .then(CommandManager.literal("hulllist")
+                        .executes(ctx -> hullListFromNearest(ctx, 96, 5)) // radius=96, force rebuild if needed
                 )
         );
     }
@@ -122,7 +136,100 @@ public class PylonCommand {
         ServerPlayNetworking.send(player, ModPackets.PYLON_LINES, buf);
 
         src.sendFeedback(() -> Text.literal("She pylon my area till I convex hull"), false);
-//        src.sendFeedback(() -> Text.literal("Showing convex hull for " + (durationTicks / 20) + "s (" + hull.size() + " points)"), false);
+        src.sendFeedback(() -> Text.literal("Showing convex hull for " + (durationTicks / 20) + "s (" + hull.size() + " points)"), false);
+        return 1;
+    }
+
+    private static int hullFromNearest(CommandContext<ServerCommandSource> ctx, int seconds) {
+        var src = ctx.getSource();
+        var player = src.getPlayer();
+        var world = player.getServerWorld();
+
+        BlockPos nearest = null;
+        double best = Double.MAX_VALUE;
+        for(BlockPos p : PylonControllerState.get(world).getAll()) {
+            double d2 = p.getSquaredDistance(player.getBlockPos());
+            if(d2 < best && d2 <= (96*96)) { best = d2; nearest = p; }
+        }
+
+        if(nearest == null) {
+            src.sendFeedback(() -> Text.literal("No controller nearby."), false);
+            return 0;
+        }
+
+        var blockEntity = world.getBlockEntity(nearest);
+        if(!(blockEntity instanceof PylonControllerBlockEntity ctrl)) {
+            src.sendFeedback(() -> Text.literal("Pylon controller missing block entity."), false);
+            return 0;
+        }
+
+        ctrl.forceRefresh(world);
+        ctrl.onTopologyEvent(nearest, PylonTopoEvent.CTRL_ADDED);
+        ctrl.serverTick();
+
+        var list = ctrl.getHullClosed();
+        int duration = Math.max(20, seconds * 20);
+
+        var buf = new PacketByteBuf(Unpooled.buffer());
+        buf.writeIdentifier(world.getRegistryKey().getValue());
+        buf.writeVarInt(duration);
+        buf.writeVarInt(list.size());
+        for(BlockPos p : list) buf.writeBlockPos(p);
+
+        ServerPlayNetworking.send(player, ModPackets.PYLON_LINES, buf);
+        src.sendFeedback(() -> Text.literal("Showing hull (" + list.size() + " pts)"), false);
+        return 1;
+    }
+
+    private static int hullListFromNearest(CommandContext<ServerCommandSource> ctx, int searchRadius, int seconds) {
+        final ServerCommandSource src = ctx.getSource();
+        final ServerPlayerEntity player = src.getPlayer();
+        final ServerWorld sw = player.getServerWorld();
+        final BlockPos origin = player.getBlockPos();
+
+        // Find nearest controller within radius
+        BlockPos nearest = null;
+        double bestD2 = (double)searchRadius * searchRadius;
+        for (BlockPos cPos : PylonControllerState.get(sw).getAll()) {
+            double d2 = cPos.getSquaredDistance(origin);
+            if (d2 <= bestD2) { bestD2 = d2; nearest = cPos; }
+        }
+
+        if (nearest == null) {
+            src.sendFeedback(() -> Text.literal("No pylon controller found within " + searchRadius + " blocks."), false);
+            return 0;
+        }
+
+        BlockEntity be = sw.getBlockEntity(nearest);
+        if (!(be instanceof PylonControllerBlockEntity ctrl)) {
+            src.sendFeedback(() -> Text.literal("Nearest controller at " + be.getPos() + " has no valid block entity."), false);
+            return 0;
+        }
+
+        // Ensure the controller has a fresh local view and hull
+        // Use whatever you implemented; prefer forceResync(sw), else resyncIfEmpty(sw).
+        ctrl.forceRefresh(sw);
+        ctrl.serverTick(); // trigger immediate rebuild if dirty
+
+        // Fetch closed hull (last == first if size >= 2)
+        java.util.List<BlockPos> hull = ctrl.getHullClosed();
+        int count = hull.size();
+
+        if (count == 0) {
+            src.sendFeedback(() -> Text.literal("No hull could be computed (need at least 3 pylons)."), false);
+            return 1;
+        }
+
+        // Print a compact, ordered list
+        StringBuilder sb = new StringBuilder();
+        sb.append("Hull vertices (").append(count).append("): ");
+        for (int i = 0; i < count; i++) {
+            BlockPos p = hull.get(i);
+            if (i > 0) sb.append(" -> ");
+            sb.append("(").append(p.getX()).append(",").append(p.getY()).append(",").append(p.getZ()).append(")");
+        }
+        src.sendFeedback(() -> Text.literal(sb.toString()), false);
+
         return 1;
     }
 }

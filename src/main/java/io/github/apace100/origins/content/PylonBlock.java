@@ -1,5 +1,6 @@
 package io.github.apace100.origins.content;
 
+import io.github.apace100.origins.content.pylon.PylonControllerState;
 import io.github.apace100.origins.content.pylon.PylonState;
 import net.minecraft.block.BlockRenderType;
 import net.minecraft.block.BlockState;
@@ -31,6 +32,7 @@ public class PylonBlock extends BlockWithEntity {
         super.onPlaced(world, pos, state, placer, itemStack);
         if(!world.isClient && world instanceof ServerWorld serverWorld) {
             PylonState.get(serverWorld).add(pos);
+            PylonControllerState.notifyPylonChanged(serverWorld, pos, true, PylonControllerBlockEntity.LINK_RADIUS);
         }
     }
 
@@ -40,6 +42,7 @@ public class PylonBlock extends BlockWithEntity {
         if (state.getBlock() != newState.getBlock()) {
             if (!world.isClient && world instanceof ServerWorld serverWorld) {
                 PylonState.get(serverWorld).remove(pos);
+                PylonControllerState.notifyPylonChanged(serverWorld, pos, false, PylonControllerBlockEntity.LINK_RADIUS);
             }
         }
 
