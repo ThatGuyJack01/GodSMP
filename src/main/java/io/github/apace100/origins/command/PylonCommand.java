@@ -10,7 +10,7 @@ import io.github.apace100.origins.content.pylon.PylonControllerState;
 import io.github.apace100.origins.content.pylon.PylonState;
 import io.github.apace100.origins.content.pylon.PylonTopoEvent;
 import io.github.apace100.origins.networking.ModPackets;
-import io.github.apace100.server.PylonVisualizer;
+import io.github.apace100.origins.server.PylonVisualizer;
 import io.netty.buffer.Unpooled;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.block.entity.BlockEntity;
@@ -32,153 +32,116 @@ public class PylonCommand {
     public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
         dispatcher.register(CommandManager.literal("pylon")
                 .requires(source -> source.hasPermissionLevel(2))
-                .then(CommandManager.literal("list").executes(PylonCommand::listPylons))
-                .then(CommandManager.literal("visualize")
-                        // with argument: /pylon visualize true|false
+                .then(CommandManager.literal("list")
+                    .then(CommandManager.literal("pylons")
+                        .executes(ctx -> listPylons(ctx, ListType.PYLON))
+                    )
+                    .then(CommandManager.literal("controllers")
+                            .executes(ctx -> listPylons(ctx, ListType.PYLON_CONTROLLER))
+                    )
+                    .then(CommandManager.literal("nearest_hull")
+                            .executes(ctx -> hullListFromNearest(ctx, 96, 5))
+                    )
+                )
+                .then(CommandManager.literal("view")
                         .then(CommandManager.argument("enabled", BoolArgumentType.bool())
                                 .executes(ctx -> {
-                                    ServerPlayerEntity player = ctx.getSource().getPlayer();
-                                    boolean enabled = BoolArgumentType.getBool(ctx, "enabled");
-                                    PylonVisualizer.set(player, enabled);
-                                    ctx.getSource().sendFeedback(() -> Text.literal("Pylon visualize: " + enabled), false);
+                                    var p = ctx.getSource().getPlayer();
+                                    boolean on = BoolArgumentType.getBool(ctx, "enabled");
+                                    PylonVisualizer.setView(p, on);  // maps to NEAREST_HULL or OFF
+                                    ctx.getSource().sendFeedback(() -> Text.literal("Pylon view: " + (on ? "ON (nearest hull)" : "OFF")), false);
                                     return 1;
                                 })
                         )
-                )
-                .then(CommandManager.literal("clear").executes(PylonCommand::clearList))
-                    .then(CommandManager.literal("hullitall")
-                        .then(CommandManager.argument("seconds", IntegerArgumentType.integer())
-                            .executes(ctx -> sendHull(ctx, IntegerArgumentType.getInteger(ctx, "seconds"))))
-                            .executes(ctx -> sendHull(ctx, 5)
-                    )
-                )
-                .then(CommandManager.literal("hull").executes(ctx -> hullFromNearest(ctx, 5)))
-                .then(CommandManager.literal("hull")
-                        .then(CommandManager.argument("seconds", IntegerArgumentType.integer(1, 60))
-                                .executes(ctx -> hullFromNearest(ctx, IntegerArgumentType.getInteger(ctx, "seconds")))
-                        )
-                )
-                .then(CommandManager.literal("hulllist")
-                        .executes(ctx -> hullListFromNearest(ctx, 96, 5)) // radius=96, force rebuild if needed
+                        .executes(ctx -> {
+                            var p = ctx.getSource().getPlayer();
+                            var mode = PylonVisualizer.getMode(p);
+                            ctx.getSource().sendFeedback(() -> Text.literal("Pylon view is " + (mode == PylonVisualizer.VisualizeMode.NEAREST_HULL ? "ON" : "OFF")), false);
+                            return 1;
+                        })
                 )
         );
     }
 
-    private static int listPylons(CommandContext<ServerCommandSource> context) {
+    private static int listPylons(CommandContext<ServerCommandSource> context, ListType listType) {
         ServerCommandSource source = context.getSource();
         MinecraftServer server = source.getServer();
         int overallTotal = 0;
+        if(listType == ListType.PYLON)
+        {
+            for (ServerWorld world : server.getWorlds()) {
+                PylonState state = PylonState.get(world);
+                Collection<BlockPos> positions = state.getPositions();
+                overallTotal += positions.size();
 
-        for (ServerWorld world : server.getWorlds()) {
-            PylonState state = PylonState.get(world);
-            Collection<BlockPos> positions = state.getPositions();
-            overallTotal += positions.size();
+                source.sendFeedback(() -> Text.literal("Dimension: " + world.getRegistryKey().getValue()), false);
 
-            source.sendFeedback(() -> Text.literal("Dimension: " + world.getRegistryKey().getValue()), false);
+                if (positions.isEmpty()) {
+                    source.sendFeedback(() -> Text.literal("  (no pylons)"), false);
+                    continue;
+                }
 
-            if (positions.isEmpty()) {
-                source.sendFeedback(() -> Text.literal("  (no pylons)"), false);
-                continue;
+                List<BlockPos> sortedPositions = new ArrayList<>(positions);
+                sortedPositions.sort(Comparator
+                        .comparingInt(BlockPos::getX)
+                        .thenComparingInt(BlockPos::getY)
+                        .thenComparingInt(BlockPos::getZ));
+
+                for (BlockPos pos : sortedPositions) {
+                    source.sendFeedback(() -> Text.literal("  - " + pos.toShortString()), false);
+                }
+
+                int dimensionTotal = sortedPositions.size();
+                source.sendFeedback(() -> Text.literal("  Total: " + dimensionTotal), false);
             }
 
-            List<BlockPos> sortedPositions = new ArrayList<>(positions);
-            sortedPositions.sort(Comparator
-                    .comparingInt(BlockPos::getX)
-                    .thenComparingInt(BlockPos::getY)
-                    .thenComparingInt(BlockPos::getZ));
-
-            for (BlockPos pos : sortedPositions) {
-                source.sendFeedback(() -> Text.literal("  - " + pos.toShortString()), false);
+            if (overallTotal == 0) {
+                source.sendFeedback(() -> Text.literal("No pylons registered."), false);
+            } else {
+                int total = overallTotal;
+                source.sendFeedback(() -> Text.literal("Overall pylons: " + total), false);
             }
 
-            int dimensionTotal = sortedPositions.size();
-            source.sendFeedback(() -> Text.literal("  Total: " + dimensionTotal), false);
+            return overallTotal;
         }
+        else if (listType == ListType.PYLON_CONTROLLER)
+        {
+            for (ServerWorld world : server.getWorlds()) {
+                PylonControllerState state = PylonControllerState.get(world);
+                Collection<BlockPos> positions = state.getAll();
+                overallTotal += positions.size();
 
-        if (overallTotal == 0) {
-            source.sendFeedback(() -> Text.literal("No pylons registered."), false);
-        } else {
-            int total = overallTotal;
-            source.sendFeedback(() -> Text.literal("Overall pylons: " + total), false);
+                source.sendFeedback(() -> Text.literal("Dimension: " + world.getRegistryKey().getValue()), false);
+
+                if (positions.isEmpty()) {
+                    source.sendFeedback(() -> Text.literal("  (no pylon controllers)"), false);
+                    continue;
+                }
+
+                List<BlockPos> sortedPositions = new ArrayList<>(positions);
+                sortedPositions.sort(Comparator
+                        .comparingInt(BlockPos::getX)
+                        .thenComparingInt(BlockPos::getY)
+                        .thenComparingInt(BlockPos::getZ));
+
+                for (BlockPos pos : sortedPositions) {
+                    source.sendFeedback(() -> Text.literal("  - " + pos.toShortString()), false);
+                }
+
+                int dimensionTotal = sortedPositions.size();
+                source.sendFeedback(() -> Text.literal("  Total: " + dimensionTotal), false);
+            }
+
+            if (overallTotal == 0) {
+                source.sendFeedback(() -> Text.literal("No pylons controllers found."), false);
+            } else {
+                int total = overallTotal;
+                source.sendFeedback(() -> Text.literal("Total pylon controllers: " + total), false);
+            }
+
+            return overallTotal;
         }
-
-        return overallTotal;
-    }
-
-    private static int clearList(CommandContext<ServerCommandSource> context) {
-        ServerCommandSource source = context.getSource();
-        MinecraftServer server = source.getServer();
-        if(server.getWorlds() == null) return 0;
-        for (ServerWorld world : server.getWorlds()) {
-            PylonState state = PylonState.get(world);
-            if(state.getPositions().isEmpty()) continue;
-            for(BlockPos pos : state.getPositions())
-                state.remove(pos);
-        }
-        source.sendFeedback(() -> Text.literal("Pylons cleared!"), false);
-        return 1;
-    }
-
-    private static int sendHull(CommandContext<ServerCommandSource> ctx, int seconds) {
-        var src = ctx.getSource();
-        var player = src.getPlayer();
-        var world = player.getServerWorld();
-
-        List<BlockPos> hull = PylonArea.buildHullList(world);
-        int durationTicks = Math.max(20, seconds * 20);
-
-        var buf = new PacketByteBuf(io.netty.buffer.Unpooled.buffer());
-        buf.writeIdentifier(world.getRegistryKey().getValue()); // dimension
-        buf.writeVarInt(durationTicks);
-        buf.writeVarInt(hull.size());
-        for (BlockPos p : hull) buf.writeBlockPos(p);
-
-        ServerPlayNetworking.send(player, ModPackets.PYLON_LINES, buf);
-
-        src.sendFeedback(() -> Text.literal("She pylon my area till I convex hull"), false);
-        src.sendFeedback(() -> Text.literal("Showing convex hull for " + (durationTicks / 20) + "s (" + hull.size() + " points)"), false);
-        return 1;
-    }
-
-    private static int hullFromNearest(CommandContext<ServerCommandSource> ctx, int seconds) {
-        var src = ctx.getSource();
-        var player = src.getPlayer();
-        var world = player.getServerWorld();
-
-        BlockPos nearest = null;
-        double best = Double.MAX_VALUE;
-        for(BlockPos p : PylonControllerState.get(world).getAll()) {
-            double d2 = p.getSquaredDistance(player.getBlockPos());
-            if(d2 < best && d2 <= (96*96)) { best = d2; nearest = p; }
-        }
-
-        if(nearest == null) {
-            src.sendFeedback(() -> Text.literal("No controller nearby."), false);
-            return 0;
-        }
-
-        var blockEntity = world.getBlockEntity(nearest);
-        if(!(blockEntity instanceof PylonControllerBlockEntity ctrl)) {
-            src.sendFeedback(() -> Text.literal("Pylon controller missing block entity."), false);
-            return 0;
-        }
-
-        ctrl.forceRefresh(world);
-        ctrl.onTopologyEvent(nearest, PylonTopoEvent.CTRL_ADDED);
-        ctrl.serverTick();
-
-        var list = ctrl.getHullClosed();
-        int duration = Math.max(20, seconds * 20);
-
-        var buf = new PacketByteBuf(Unpooled.buffer());
-        buf.writeIdentifier(world.getRegistryKey().getValue());
-        buf.writeVarInt(duration);
-        buf.writeVarInt(list.size());
-        for(BlockPos p : list) buf.writeBlockPos(p);
-
-        ServerPlayNetworking.send(player, ModPackets.PYLON_LINES, buf);
-        src.sendFeedback(() -> Text.literal("Showing hull (" + list.size() + " pts)"), false);
-        return 1;
+        else { return 0; }
     }
 
     private static int hullListFromNearest(CommandContext<ServerCommandSource> ctx, int searchRadius, int seconds) {
@@ -231,5 +194,10 @@ public class PylonCommand {
         src.sendFeedback(() -> Text.literal(sb.toString()), false);
 
         return 1;
+    }
+
+    private enum ListType {
+        PYLON,
+        PYLON_CONTROLLER
     }
 }
