@@ -1,4 +1,10 @@
-# Origins Mod for Minecraft
+# Notice 
+I DID NOT WRITE THE BASE CODE FOR THIS. This is a fork of the [Origins Mod](https://github.com/apace100/origins-fabric). I have just expanded upon their base code, adding in my own origins. This is a standalone mod and does not require an additional version of origins (although it should be compatible with origin extension mods in theory.)
+
+This mode is made for a server my friends and I play on, so each origin is setup for their character individually. This will also contain various other features for our server too.
+
+
+# Origins Mod for Minecraft:
 
 https://www.curseforge.com/minecraft/mc-mods/origins
 
