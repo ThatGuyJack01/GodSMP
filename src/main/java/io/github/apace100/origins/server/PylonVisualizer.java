@@ -11,7 +11,6 @@ import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 
 import java.util.*;
@@ -29,18 +28,13 @@ public final class PylonVisualizer {
 
     public enum VisualizeMode { OFF, ALL, HULL, NEAREST_HULL }
 
-    /** Per-player current mode. */
     private static final Map<UUID, VisualizeMode> WATCH = new ConcurrentHashMap<>();
 
-    /** How close a player must be to a hull centroid to see it in NEAREST_HULL mode. */
     public static double VIEW_RADIUS = 96.0;
 
-    /** Packet lifespan a bit > 1s so dots don’t flicker with the 1Hz push. */
     private static final int PACKET_DURATION_TICKS = 25;
 
     private PylonVisualizer() {}
-
-    /* --------------------------- lifecycle --------------------------- */
 
     public static void initServerHooks() {
         // Push once per second
@@ -66,25 +60,19 @@ public final class PylonVisualizer {
         });
     }
 
-    /* --------------------------- public api --------------------------- */
-
-    /** Set a specific mode for a player. */
     public static void set(ServerPlayerEntity player, VisualizeMode mode) {
         if (mode == VisualizeMode.OFF) WATCH.remove(player.getUuid());
         else WATCH.put(player.getUuid(), mode);
     }
 
-    /** Get a player's current mode. */
     public static VisualizeMode getMode(ServerPlayerEntity player) {
         return WATCH.getOrDefault(player.getUuid(), VisualizeMode.OFF);
     }
 
-    /** Convenience for your new toggle `/pylon view true|false` → NEAREST_HULL/OFF. */
     public static void setView(ServerPlayerEntity player, boolean enabled) {
         set(player, enabled ? VisualizeMode.NEAREST_HULL : VisualizeMode.OFF);
     }
 
-    /** Back-compat for old boolean visualize toggle (maps to ALL/OFF). */
     public static void setLegacyAll(ServerPlayerEntity player, boolean enabled) {
         set(player, enabled ? VisualizeMode.ALL : VisualizeMode.OFF);
     }
@@ -93,9 +81,6 @@ public final class PylonVisualizer {
         return getMode(player) != VisualizeMode.OFF;
     }
 
-    /* --------------------------- streaming helpers --------------------------- */
-
-    /** NEAREST_HULL: pick the nearest controller by centroid within VIEW_RADIUS, send its hull. */
     private static void sendNearestHullSnapshot(ServerPlayerEntity player) {
         ServerWorld sw = player.getServerWorld();
         BlockPos playerPos = player.getBlockPos();
@@ -109,7 +94,6 @@ public final class PylonVisualizer {
 
             List<BlockPos> hull = ctrl.getHullClosed();
             if (hull.isEmpty()) {
-                // self-heal once if empty (pre-existing pylons after join)
                 ctrl.forceRefresh(sw);
                 ctrl.serverTick();
                 hull = ctrl.getHullClosed();
@@ -121,7 +105,7 @@ public final class PylonVisualizer {
             if (d2 <= bestD2) { bestD2 = d2; bestCtrl = cpos; }
         }
 
-        if (bestCtrl == null) return; // too far from any hull → show nothing
+        if (bestCtrl == null) return; // too far from any hull -> show nothing
 
         var be = sw.getBlockEntity(bestCtrl);
         if (!(be instanceof PylonControllerBlockEntity ctrl)) return;
@@ -131,13 +115,10 @@ public final class PylonVisualizer {
         sendHullPacket(player, sw, hull);
     }
 
-    /** HULL: choose which controller/network to show. For now, reuse nearest (you can swap to “bound controller” if you track that). */
     private static void sendChosenHullSnapshot(ServerPlayerEntity player) {
-        // Currently same as nearest; change this if you add "player’s active controller" state.
         sendNearestHullSnapshot(player);
     }
 
-    /** ALL: debug path — stream all pylons in a stable order (optionally close the loop). */
     private static void sendAllPylonsSnapshot(ServerPlayerEntity player) {
         ServerWorld sw = player.getServerWorld();
         var positions = PylonState.get(sw).getPositions();
