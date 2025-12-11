@@ -1,9 +1,7 @@
 package io.github.apace100.origins.content;
 
-import io.github.apace100.origins.content.pylon.PylonArea;
-import io.github.apace100.origins.content.pylon.PylonControllerState;
-import io.github.apace100.origins.content.pylon.PylonState;
-import io.github.apace100.origins.content.pylon.PylonTopoEvent;
+import io.github.apace100.origins.Origins;
+import io.github.apace100.origins.content.pylon.*;
 import io.github.apace100.origins.registry.ModBlockEntities;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
@@ -14,12 +12,13 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 import org.apache.logging.log4j.core.jmx.Server;
+import org.jetbrains.annotations.Nullable;
 
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.stream.Collectors;
 
-public class PylonControllerBlockEntity extends BlockEntity {
+public class PylonControllerBlockEntity extends BlockEntity implements OwnablePylon {
     public static final double LINK_RADIUS = 20.0;
     public static final double SCAN_RADIUS = 16.0;
     private static final int MAX_CONTROLLERS = 4;
@@ -34,6 +33,8 @@ public class PylonControllerBlockEntity extends BlockEntity {
 
     private List<BlockPos> hullVerticesClosed = List.of(); // ordered + last==first
     private int yMin = 0, yMax = 0;
+
+    private UUID owner;
 
     public PylonControllerBlockEntity(BlockPos pos, BlockState state) {
         super(ModBlockEntities.PYLON_CONTROLLER, pos, state);
@@ -150,6 +151,8 @@ public class PylonControllerBlockEntity extends BlockEntity {
         nbt.putUuid("net", networkId);
         nbt.putInt("yMin", yMin);
         nbt.putInt("yMax", yMax);
+        if (owner != null) nbt.putUuid("Owner", owner);
+        Origins.LOGGER.info("[PylonCtrlBE] writeNbt pos={} owner={}", this.pos, this.owner);
     }
 
     @Override
@@ -158,7 +161,9 @@ public class PylonControllerBlockEntity extends BlockEntity {
         if (nbt.containsUuid("net")) networkId = nbt.getUuid("net");
         yMin = nbt.getInt("yMin");
         yMax = nbt.getInt("yMax");
+        owner = nbt.containsUuid("Owner") ? nbt.getUuid("Owner") : null;
         hullDirty = true;
+        Origins.LOGGER.info("[PylonCtrlBE] readNbt pos={} owner={}", this.pos, this.owner);
     }
 
     @Override
@@ -173,6 +178,14 @@ public class PylonControllerBlockEntity extends BlockEntity {
         for(BlockPos p : PylonState.get(world).getPositions()) {
 //            if(!world.isChunkLoaded(p)) continue;
             if (p.getSquaredDistance(this.pos) <= r2) {
+                if(this.owner != null) {
+                    BlockEntity be = world.getBlockEntity(p);
+                    if(!(be instanceof PylonBlockEntity pylonBe)) continue;
+                    UUID pOwner = pylonBe.getOwner();
+                    if(!Objects.equals(this.owner, pOwner)) continue;
+                } else {
+                    continue;
+                }
                 localPylons.add(p);
             }
         }
@@ -183,6 +196,10 @@ public class PylonControllerBlockEntity extends BlockEntity {
             if(c.equals(this.pos)) continue;
 //            if(!world.isChunkLoaded(c)) continue;
             if(c.getSquaredDistance(this.pos) <= lr2) {
+                BlockEntity be = world.getBlockEntity(c);
+                if(!(be instanceof PylonControllerBlockEntity otherCtrl)) continue;
+                if(!Objects.equals(this.owner, otherCtrl.getOwner())) continue;
+
                 neighborControllers.add(c);
             }
         }
@@ -244,4 +261,20 @@ public class PylonControllerBlockEntity extends BlockEntity {
         return inside;
     }
 
+    @Override
+    public @Nullable UUID getOwner() {
+        return owner;
+    }
+
+    @Override
+    public void setOwner(@Nullable UUID owner) {
+        this.owner = owner;
+    }
+
+    public PylonMode getOwnerMode() {
+        if(owner == null || !(world instanceof ServerWorld sw)) {
+            return PylonMode.NONE;
+        }
+        return PlayerPylonState.get(sw).getMode(owner);
+    }
 }

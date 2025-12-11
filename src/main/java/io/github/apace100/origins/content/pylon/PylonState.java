@@ -76,6 +76,4 @@ public class PylonState extends PersistentState {
         nbt.put(POSITIONS_KEY, list);
         return nbt;
     }
-
-
 }

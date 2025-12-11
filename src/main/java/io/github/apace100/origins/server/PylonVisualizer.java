@@ -1,5 +1,6 @@
 package io.github.apace100.origins.server;
 
+import io.github.apace100.origins.content.PylonBlockEntity;
 import io.github.apace100.origins.content.PylonControllerBlockEntity;
 import io.github.apace100.origins.content.pylon.PylonControllerState;
 import io.github.apace100.origins.content.pylon.PylonState;
@@ -8,6 +9,7 @@ import io.netty.buffer.Unpooled;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
@@ -84,6 +86,7 @@ public final class PylonVisualizer {
     private static void sendNearestHullSnapshot(ServerPlayerEntity player) {
         ServerWorld sw = player.getServerWorld();
         BlockPos playerPos = player.getBlockPos();
+        UUID viewerId = player.getUuid();
 
         BlockPos bestCtrl = null;
         double bestD2 = VIEW_RADIUS * VIEW_RADIUS;
@@ -91,6 +94,11 @@ public final class PylonVisualizer {
         for (BlockPos cpos : PylonControllerState.get(sw).getAll()) {
             var be = sw.getBlockEntity(cpos);
             if (!(be instanceof PylonControllerBlockEntity ctrl)) continue;
+
+            UUID owner = ctrl.getOwner();
+            if(!Objects.equals(owner, viewerId)) {
+                continue;
+            }
 
             List<BlockPos> hull = ctrl.getHullClosed();
             if (hull.isEmpty()) {
@@ -121,26 +129,34 @@ public final class PylonVisualizer {
 
     private static void sendAllPylonsSnapshot(ServerPlayerEntity player) {
         ServerWorld sw = player.getServerWorld();
-        var positions = PylonState.get(sw).getPositions();
+        UUID viewerId = player.getUuid();
 
-        List<BlockPos> list = positions.stream()
-                .filter(sw::isChunkLoaded)
-                .sorted(Comparator.<BlockPos>comparingInt(BlockPos::getY)
-                        .thenComparingInt(BlockPos::getZ)
-                        .thenComparingInt(BlockPos::getX))
-                .toList();
-
-        if (list.isEmpty()) return;
-
-        // (Optional) close loop so the debug view draws a ring
-        if (list.size() >= 2) {
-            List<BlockPos> closed = new ArrayList<>(list.size() + 1);
-            closed.addAll(list);
-            closed.add(list.get(0));
-            list = closed;
+        List<BlockPos> filtered = new ArrayList<>();
+        for (BlockPos pos : PylonState.get(sw).getPositions()) {
+            if (!sw.isChunkLoaded(pos)) continue;
+            BlockEntity be = sw.getBlockEntity(pos);
+            if (!(be instanceof PylonBlockEntity pylonBe)) continue;
+            java.util.UUID pOwner = pylonBe.getOwner();
+            if (!java.util.Objects.equals(pOwner, viewerId)) continue; // 🔑 only own pylons
+            filtered.add(pos);
         }
 
-        sendHullPacket(player, sw, list);
+        if(filtered.isEmpty()) return;
+
+        filtered.sort(
+                Comparator.<BlockPos>comparingInt(BlockPos::getY)
+                        .thenComparingInt(BlockPos::getZ)
+                        .thenComparingInt(BlockPos::getX)
+        );
+
+        if (filtered.size() >= 2) {
+            List<BlockPos> closed = new ArrayList<>(filtered.size() + 1);
+            closed.addAll(filtered);
+            closed.add(filtered.get(0));
+            filtered = closed;
+        }
+
+        sendHullPacket(player, sw, filtered);
     }
 
     private static void sendHullPacket(ServerPlayerEntity player, ServerWorld sw, List<BlockPos> hullClosed) {

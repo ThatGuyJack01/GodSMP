@@ -1,6 +1,9 @@
 package io.github.apace100.origins.content;
 
+import io.github.apace100.origins.Origins;
+import io.github.apace100.origins.content.pylon.OwnablePylon;
 import io.github.apace100.origins.content.pylon.PylonControllerState;
+import io.github.apace100.origins.content.pylon.PylonPermissions;
 import io.github.apace100.origins.content.pylon.PylonState;
 import net.minecraft.block.BlockRenderType;
 import net.minecraft.block.BlockState;
@@ -8,6 +11,7 @@ import net.minecraft.block.BlockWithEntity;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.item.ItemStack;
+import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
@@ -33,6 +37,17 @@ public class PylonBlock extends BlockWithEntity {
         if(!world.isClient && world instanceof ServerWorld serverWorld) {
             PylonState.get(serverWorld).add(pos);
             PylonControllerState.notifyPylonChanged(serverWorld, pos, true, PylonControllerBlockEntity.LINK_RADIUS);
+
+            BlockEntity be = world.getBlockEntity(pos);
+            if(placer instanceof ServerPlayerEntity player) {
+                if(be instanceof OwnablePylon ownable) {
+                    if(PylonPermissions.canOwnPylons(player)) {
+                        ownable.setOwner(player.getUuid());
+                    } else {
+                        ownable.setOwner(null);
+                    }
+                }
+            }
         }
     }
 
