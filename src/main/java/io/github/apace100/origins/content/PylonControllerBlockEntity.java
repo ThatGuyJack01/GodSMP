@@ -8,6 +8,7 @@ import io.github.apace100.origins.registry.ModBlockEntities;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.entity.BlockEntity;
+import net.minecraft.entity.Entity;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
@@ -193,4 +194,54 @@ public class PylonControllerBlockEntity extends BlockEntity {
         hullDirty = true;
         nextRebuildTick = world.getTime();
     }
+
+    public boolean isEntityInside(Entity e) {
+        var pos = e.getPos();
+        return isPosInsideHull(pos.x, pos.y, pos.z);
+    }
+
+    public boolean isPosInsideHull(double x, double y, double z) {
+        if (hullVerticesClosed == null || hullVerticesClosed.isEmpty()) return false;
+
+        if (y < this.yMin || y > this.yMax) return false;
+
+        return isPointInPolygonXZ(x, z);
+    }
+
+    private boolean isPointInPolygonXZ(double x, double z) {
+        int n = hullVerticesClosed.size();
+        if (n < 3) return false;
+
+        int effectiveN = n;
+        if (n >= 2) {
+            BlockPos first = hullVerticesClosed.get(0);
+            BlockPos last = hullVerticesClosed.get(n - 1);
+            if(first.getX() == last.getX() && first.getZ() == last.getZ())
+            {
+                effectiveN = n - 1;
+                if (effectiveN < 3) return false;
+            }
+        }
+
+        boolean inside = false;
+        int j = effectiveN -1;
+
+        for(int i = 0; i < effectiveN; i++) {
+            BlockPos pi = hullVerticesClosed.get(i);
+            BlockPos pj = hullVerticesClosed.get(j);
+
+            double xi = pi.getX() + 0.5;
+            double zi = pi.getZ() + 0.5;
+            double xj = pj.getX() + 0.5;
+            double zj = pj.getZ() + 0.5;
+
+            boolean intersect = ((zi > z) != (zj > z)) && (x < (xj - xi) * (z - zi) / (zj - zi + 1e-9) + xi);
+
+            if (intersect) inside = !inside;
+            j = i;
+        }
+
+        return inside;
+    }
+
 }

@@ -60,6 +60,9 @@ public class PylonCommand {
                             return 1;
                         })
                 )
+                .then(CommandManager.literal("testinside")
+                        .executes(PylonCommand::testInside)
+                )
         );
     }
 
@@ -200,4 +203,98 @@ public class PylonCommand {
         PYLON,
         PYLON_CONTROLLER
     }
+
+    private static int testInside(com.mojang.brigadier.context.CommandContext<net.minecraft.server.command.ServerCommandSource> ctx) {
+        var src = ctx.getSource();
+        var player = src.getPlayer();
+        var sw = player.getServerWorld();
+        var playerPos = player.getBlockPos();
+
+        // 1) Find nearest controller (tune radius as needed)
+        int searchRadius = 96;
+        BlockPos nearest = null;
+        double bestD2 = searchRadius * searchRadius;
+
+        for (BlockPos cPos : PylonControllerState.get(sw).getAll()) {
+            double d2 = cPos.getSquaredDistance(playerPos);
+            if (d2 <= bestD2) {
+                bestD2 = d2;
+                nearest = cPos;
+            }
+        }
+
+        if (nearest == null) {
+            src.sendFeedback(() -> net.minecraft.text.Text.literal("No pylon controller found within " + searchRadius + " blocks."), false);
+            return 0;
+        }
+
+        var be = sw.getBlockEntity(nearest);
+        if (!(be instanceof PylonControllerBlockEntity ctrl)) {
+            BlockPos finalNearest1 = nearest;
+            src.sendFeedback(() -> net.minecraft.text.Text.literal("Controller at " + finalNearest1 + " has no valid block entity."), false);
+            return 0;
+        }
+
+        // 2) Make sure hull is up to date (uses your strong resync)
+        ctrl.forceRefresh(sw); // or resyncIfEmpty(sw) if that’s what you have
+        ctrl.serverTick();
+
+        var hull = ctrl.getHullClosed();
+        if (hull == null || hull.size() < 3) {
+            src.sendFeedback(() -> net.minecraft.text.Text.literal("Controller hull is empty or has fewer than 3 points."), false);
+            return 0;
+        }
+
+        int yMin = ctrl.getYMin();
+        int yMax = ctrl.getYMax();
+
+        // 3) Build an AABB around hull extents
+        int minX = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE;
+        int minZ = Integer.MAX_VALUE, maxZ = Integer.MIN_VALUE;
+        for (BlockPos p : hull) {
+            if (p.getX() < minX) minX = p.getX();
+            if (p.getX() > maxX) maxX = p.getX();
+            if (p.getZ() < minZ) minZ = p.getZ();
+            if (p.getZ() > maxZ) maxZ = p.getZ();
+        }
+
+        // Expand by 1 block to fully cover edges
+        var box = new net.minecraft.util.math.Box(
+                minX,      yMin,      minZ,
+                maxX + 1,  yMax + 1,  maxZ + 1
+        );
+
+        // 4) Collect entities in box and filter precisely with isEntityInside
+        java.util.List<net.minecraft.entity.Entity> inside = sw.getOtherEntities(
+                null,
+                box,
+                e -> ctrl.isEntityInside(e)
+        );
+
+        // 5) Report results
+        int count = inside.size();
+        BlockPos finalNearest = nearest;
+        src.sendFeedback(() -> net.minecraft.text.Text.literal(
+                "Controller at " + finalNearest + " hull contains " + count + " entities."
+        ), false);
+
+        // Optionally list some names
+        if (!inside.isEmpty()) {
+            StringBuilder sb = new StringBuilder("Entities: ");
+            int show = Math.min(inside.size(), 8);
+            for (int i = 0; i < show; i++) {
+                if (i > 0) sb.append(", ");
+                sb.append(inside.get(i).getDisplayName().getString());
+            }
+            if (inside.size() > show) sb.append(" (+").append(inside.size() - show).append(" more)");
+            src.sendFeedback(() -> net.minecraft.text.Text.literal(sb.toString()), false);
+        }
+
+        // Also tell you whether *you* are inside
+        boolean playerInside = ctrl.isEntityInside(player);
+        src.sendFeedback(() -> net.minecraft.text.Text.literal("You are " + (playerInside ? "INSIDE" : "OUTSIDE") + " this hull."), false);
+
+        return 1;
+    }
+
 }
