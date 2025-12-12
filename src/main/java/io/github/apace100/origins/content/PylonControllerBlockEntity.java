@@ -7,9 +7,13 @@ import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.effect.StatusEffectInstance;
+import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Box;
 import net.minecraft.world.World;
 import org.apache.logging.log4j.core.jmx.Server;
 import org.jetbrains.annotations.Nullable;
@@ -23,6 +27,10 @@ public class PylonControllerBlockEntity extends BlockEntity implements OwnablePy
     public static final double SCAN_RADIUS = 16.0;
     private static final int MAX_CONTROLLERS = 4;
     private static final int REBUILD_DEBOUNCE_TICKS = 8;
+
+    public static final double UPDATE_INTERVAL = 20; // ticks
+    private long lastUpdateTick;
+
 
     private final Set<BlockPos> localPylons = new HashSet<>();
     private final Set<BlockPos> neighborControllers = new HashSet<>();
@@ -106,7 +114,15 @@ public class PylonControllerBlockEntity extends BlockEntity implements OwnablePy
 
     public void serverTick() {
         if (!(world instanceof ServerWorld serverWorld)) return;
-        if (!hullDirty || serverWorld.getTime() < nextRebuildTick) return;
+
+        long time = serverWorld.getTime();
+
+        if(time - lastUpdateTick >= UPDATE_INTERVAL) {
+            lastUpdateTick = time;
+            runDebugGlow(serverWorld, time);
+        }
+
+        if (!hullDirty || time < nextRebuildTick) return;
 
         List<BlockPos> members = new ArrayList<>();
         members.add(this.pos);
@@ -276,5 +292,51 @@ public class PylonControllerBlockEntity extends BlockEntity implements OwnablePy
             return PylonMode.NONE;
         }
         return PlayerPylonState.get(sw).getMode(owner);
+    }
+
+    private void runDebugGlow(ServerWorld serverWorld, long time) {
+        if(hullVerticesClosed == null || hullVerticesClosed.size() < 3) return;
+        if(owner == null) return;
+
+        PylonMode mode = getOwnerMode();
+        int minX = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE;
+        int minZ = Integer.MAX_VALUE, maxZ = Integer.MIN_VALUE;
+
+        for (BlockPos p : hullVerticesClosed) {
+            int x = p.getX();
+            int z = p.getZ();
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (z < minZ) minZ = z;
+            if (z > maxZ) maxZ = z;
+        }
+
+        if (minX > maxX || minZ > maxZ) return;
+
+        Box box = new Box(minX, yMin, minZ,maxX + 1,yMax + 1,maxZ + 1);
+
+        Origins.LOGGER.info(
+                "[PylonCtrl] Creating box at ({},{}), ({},{}), ({},{})",
+                minX, maxX + 1, yMin, yMax + 1, minZ,maxZ + 1
+        );
+
+        List<Entity> inside = world.getOtherEntities(null, box, this::isEntityInside);
+
+        for (Entity e : inside) {
+            if (e instanceof LivingEntity le) {
+                le.addStatusEffect(new StatusEffectInstance(
+                        StatusEffects.GLOWING,
+                        40,
+                        0,
+                        false,
+                        false
+                ));
+            }
+        }
+
+        Origins.LOGGER.info(
+                "[PylonCtrl] DebugGlow pos={} owner={} mode={} entitiesInside={}",
+                this.pos, this.owner, mode, inside.size()
+        );
     }
 }
