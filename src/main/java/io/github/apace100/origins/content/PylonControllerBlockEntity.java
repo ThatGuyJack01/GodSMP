@@ -10,10 +10,12 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
+import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
+import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 import org.apache.logging.log4j.core.jmx.Server;
 import org.jetbrains.annotations.Nullable;
@@ -31,6 +33,13 @@ public class PylonControllerBlockEntity extends BlockEntity implements OwnablePy
     public static final double UPDATE_INTERVAL = 20; // ticks
     private long lastUpdateTick;
 
+    private final Map<UUID, Vec3d> trappedEntities = new HashMap<>();
+
+    private static class WallState {
+        boolean wasInside;
+        Vec3d lastPos;
+    }
+    private final Map<UUID, WallState> wallStates = new HashMap<>();
 
     private final Set<BlockPos> localPylons = new HashSet<>();
     private final Set<BlockPos> neighborControllers = new HashSet<>();
@@ -117,9 +126,9 @@ public class PylonControllerBlockEntity extends BlockEntity implements OwnablePy
 
         long time = serverWorld.getTime();
 
-        if(time - lastUpdateTick >= UPDATE_INTERVAL) {
+        if(time - lastUpdateTick >= UPDATE_INTERVAL || getOwnerMode() == PylonMode.WALL) {
             lastUpdateTick = time;
-            runDebugGlow(serverWorld, time);
+            runModeTick(serverWorld, time);
         }
 
         if (!hullDirty || time < nextRebuildTick) return;
@@ -168,7 +177,6 @@ public class PylonControllerBlockEntity extends BlockEntity implements OwnablePy
         nbt.putInt("yMin", yMin);
         nbt.putInt("yMax", yMax);
         if (owner != null) nbt.putUuid("Owner", owner);
-        Origins.LOGGER.info("[PylonCtrlBE] writeNbt pos={} owner={}", this.pos, this.owner);
     }
 
     @Override
@@ -179,7 +187,6 @@ public class PylonControllerBlockEntity extends BlockEntity implements OwnablePy
         yMax = nbt.getInt("yMax");
         owner = nbt.containsUuid("Owner") ? nbt.getUuid("Owner") : null;
         hullDirty = true;
-        Origins.LOGGER.info("[PylonCtrlBE] readNbt pos={} owner={}", this.pos, this.owner);
     }
 
     @Override
@@ -294,7 +301,7 @@ public class PylonControllerBlockEntity extends BlockEntity implements OwnablePy
         return PlayerPylonState.get(sw).getMode(owner);
     }
 
-    private void runDebugGlow(ServerWorld serverWorld, long time) {
+    private void runModeTick(ServerWorld serverWorld, long time) {
         if(hullVerticesClosed == null || hullVerticesClosed.size() < 3) return;
         if(owner == null) return;
 
@@ -315,28 +322,88 @@ public class PylonControllerBlockEntity extends BlockEntity implements OwnablePy
 
         Box box = new Box(minX, yMin, minZ,maxX + 1,yMax + 1,maxZ + 1);
 
-        Origins.LOGGER.info(
-                "[PylonCtrl] Creating box at ({},{}), ({},{}), ({},{})",
-                minX, maxX + 1, yMin, yMax + 1, minZ,maxZ + 1
-        );
+        List<Entity> inside = serverWorld.getOtherEntities(null, box, this::isEntityInside);
 
-        List<Entity> inside = world.getOtherEntities(null, box, this::isEntityInside);
+        // Wall is handled in PylonWallPhysics
+        switch (mode) {
+            case AMPLIFY -> applyAmplify(serverWorld, inside);
+            case SILENT -> applySilent(serverWorld, inside);
+            case LISTEN -> applyListen(serverWorld, inside);
+            default -> {}
+        }
+    }
 
+    private void applyAmplify(ServerWorld world, List<Entity> inside) {
         for (Entity e : inside) {
-            if (e instanceof LivingEntity le) {
-                le.addStatusEffect(new StatusEffectInstance(
-                        StatusEffects.GLOWING,
-                        40,
-                        0,
-                        false,
-                        false
-                ));
+            if (!(e instanceof LivingEntity le)) continue;
+
+            if(e instanceof PlayerEntity pe && pe.getUuid().equals(owner)) continue;
+
+            le.damage(world.getDamageSources().magic(), 1.0F);
+        }
+    }
+
+    private void applySilent(ServerWorld world, List<Entity> inside) {
+        // TODO: integrate with sound system / Simple Voice Chat.
+        // For now, we just log the entities that would be "silenced".
+        if (!inside.isEmpty()) {
+            Origins.LOGGER.info(
+                    "[PylonCtrl] SILENT mode at {} would affect {} entities",
+                    this.pos, inside.size()
+            );
+        }
+    }
+
+    private void applyListen(ServerWorld world, List<Entity> inside) {
+        // TODO: spy/listen behavior later (e.g. routing sound/voice).
+        if (!inside.isEmpty()) {
+            Origins.LOGGER.info(
+                    "[PylonCtrl] LISTEN mode at {} sees {} entities inside",
+                    this.pos, inside.size()
+            );
+        }
+    }
+
+    @Nullable
+    private Vec3d projectToHullBorder(Vec3d point) {
+        if(hullVerticesClosed == null || hullVerticesClosed.size() < 2) return null;
+
+        Vec3d best = null;
+        double bestD2 = Double.MAX_VALUE;
+
+        int n = hullVerticesClosed.size();
+        int prevIndex = n - 1;
+
+        for(int i = 0; i < n; i++) {
+            BlockPos aPos = hullVerticesClosed.get(prevIndex);
+            BlockPos bPos = hullVerticesClosed.get(i);
+
+            Vec3d a = new Vec3d(aPos.getX() + 0.5, point.y, aPos.getZ() + 0.5);
+            Vec3d b = new Vec3d(bPos.getX() + 0.5, point.y, bPos.getZ() + 0.5);
+
+            Vec3d ab = b.subtract(a);
+            double abLen2 = ab.lengthSquared();
+            if(abLen2 < 1e-6) {
+                prevIndex = i;
+                continue;
             }
+
+            Vec3d ap = point.subtract(a);
+            double t = ap.dotProduct(ab) / abLen2;
+            if (t < 0.0) t = 0.0;
+            else if (t > 1.0) t = 1.0;
+
+            Vec3d proj = a.add(ab.multiply(t));
+            double d2 = proj.squaredDistanceTo(point);
+
+            if (d2 < bestD2) {
+                bestD2 = d2;
+                best = proj;
+            }
+
+            prevIndex = i;
         }
 
-        Origins.LOGGER.info(
-                "[PylonCtrl] DebugGlow pos={} owner={} mode={} entitiesInside={}",
-                this.pos, this.owner, mode, inside.size()
-        );
+        return best;
     }
 }

@@ -3,12 +3,10 @@ package io.github.apace100.origins.command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import io.github.apace100.origins.content.PylonControllerBlockEntity;
-import io.github.apace100.origins.content.pylon.PylonArea;
-import io.github.apace100.origins.content.pylon.PylonControllerState;
-import io.github.apace100.origins.content.pylon.PylonState;
-import io.github.apace100.origins.content.pylon.PylonTopoEvent;
+import io.github.apace100.origins.content.pylon.*;
 import io.github.apace100.origins.networking.ModPackets;
 import io.github.apace100.origins.server.PylonVisualizer;
 import io.netty.buffer.Unpooled;
@@ -23,10 +21,8 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.BlockPos;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
+import java.util.stream.Collectors;
 
 public class PylonCommand {
     public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
@@ -62,6 +58,11 @@ public class PylonCommand {
                 )
                 .then(CommandManager.literal("testinside")
                         .executes(PylonCommand::testInside)
+                )
+                .then(CommandManager.literal("mode")
+                        .then(CommandManager.argument("mode", StringArgumentType.word())
+                                .executes(PylonCommand::setMode)
+                        )
                 )
         );
     }
@@ -204,7 +205,7 @@ public class PylonCommand {
         PYLON_CONTROLLER
     }
 
-    private static int testInside(com.mojang.brigadier.context.CommandContext<net.minecraft.server.command.ServerCommandSource> ctx) {
+    private static int testInside(CommandContext<ServerCommandSource> ctx) {
         var src = ctx.getSource();
         var player = src.getPlayer();
         var sw = player.getServerWorld();
@@ -297,4 +298,32 @@ public class PylonCommand {
         return 1;
     }
 
+    private static int setMode(CommandContext<ServerCommandSource> context) {
+        ServerCommandSource src = context.getSource();
+        ServerPlayerEntity player = src.getPlayer();
+        ServerWorld world = src.getWorld();
+
+        String raw = StringArgumentType.getString(context, "mode");
+        String upper = raw.toUpperCase(Locale.ROOT);
+
+        PylonMode mode;
+        try {
+            mode = PylonMode.valueOf(upper);
+        } catch (IllegalArgumentException e) {
+            String valid = Arrays.stream(PylonMode.values())
+                    .map(Enum::name)
+                    .collect(Collectors.joining(", "));
+            src.sendError(Text.literal(
+                    "Unknown pylon mode '" + raw + "'. Valid: " + valid
+            ));
+            return 0;
+        }
+
+        PlayerPylonState.get(world).setMode(player.getUuid(), mode);
+        src.sendFeedback(
+                () -> Text.literal("Set your pylon mode to " + mode.name()),
+                false
+        );
+        return 1;
+    }
 }

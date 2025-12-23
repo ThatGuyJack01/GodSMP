@@ -32,13 +32,11 @@ public class PylonBlockEntity extends BlockEntity implements OwnablePylon {
     public void writeNbt(NbtCompound nbt) {
         super.writeNbt(nbt);
         if (owner != null) nbt.putUuid("Owner", owner);
-        Origins.LOGGER.info("[PylonBE] writeNbt pos={} owner={}", this.pos, this.owner);
     }
 
     @Override
     public void readNbt(NbtCompound nbt) {
         super.readNbt(nbt);
         owner = nbt.containsUuid("Owner") ? nbt.getUuid("Owner") : null;
-        Origins.LOGGER.info("[PylonBE] readNbt pos={} owner={}", this.pos, this.owner);
     }
 }
