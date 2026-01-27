@@ -3,11 +3,13 @@ package io.github.apace100.origins.content.pylon;
 import io.github.apace100.origins.Origins;
 import io.github.apace100.origins.content.PylonControllerBlockEntity;
 import net.minecraft.block.entity.BlockEntity;
+import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec2f;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.entity.Entity;
+import net.minecraft.world.World;
 
 import java.util.HashMap;
 import java.util.List;
@@ -18,7 +20,8 @@ public final class PylonWallPhysics {
 
     private static final double EPS = 1e-3; // Prevent jitter
     private static final double MIN_PUSH = 0.06;
-    private static final double MAX_PUSH = 0.35;
+    private static final double MAX_PUSH = 0.55;
+    private static final int WALL_LOCK_TIME = 6;
 
     private static final Map<UUID, Integer> WALL_LOCK_TICKS = new HashMap<>();
     private static final Map<UUID, Vec3d> WALL_LOCK_NORMAL = new HashMap<>();
@@ -38,20 +41,36 @@ public final class PylonWallPhysics {
                 return new Vec3d(0.0, movement.y, 0.0);
             }
 
-            return new Vec3d(n.x * INWARD_PUSH, movement.y, n.z * INWARD_PUSH);
-        } else {
-            WALL_LOCK_TICKS.remove(entity.getUuid());
+            // 1) Cancel OUTWARD velocity component every tick
+            Vec3d vel = entity.getVelocity();
+            double vDot = vel.dotProduct(n);
+            if (vDot < 0.0) {
+                // vel has component pointing OUTWARD (-n), remove it
+                entity.setVelocity(vel.subtract(n.multiply(vDot)));
+            }
+
+            // 2) Remove OUTWARD movement component this tick
+            double mDot = movement.dotProduct(n);
+            Vec3d clipped = movement;
+            if (mDot < 0.0) {
+                clipped = movement.subtract(n.multiply(mDot));
+            }
+
+            // 3) Apply inward push every tick (your “must be inside lock” rule)
+            Vec3d push = new Vec3d(n.x * INWARD_PUSH, 0.0, n.z * INWARD_PUSH);
+
+            return new Vec3d(clipped.x + push.x, movement.y, clipped.z + push.z);
         }
+        WALL_LOCK_TICKS.remove(entity.getUuid());
+        WALL_LOCK_NORMAL.remove(entity.getUuid());
 
-
-        if (!(entity.getWorld() instanceof ServerWorld world)) return movement;
 
         if(movement.x == 0.0 && movement.z == 0.0) return movement;
 
         Vec3d start = entity.getPos();
         Vec3d end = start.add(movement);
 
-        PylonControllerBlockEntity ctrl = findContainingWallController(world, entity, start);
+        PylonControllerBlockEntity ctrl = findContainingWallController(entity.getWorld(), entity, start);
         if(ctrl == null) return movement;
 
         if(ctrl.isPosInsideHull(end.x, end.y, end.z)) return movement;
@@ -61,7 +80,7 @@ public final class PylonWallPhysics {
             return new Vec3d(0.0, movement.y, 0.0);
         }
 
-        WALL_LOCK_TICKS.put(entity.getUuid(), 2);
+        WALL_LOCK_TICKS.put(entity.getUuid(), WALL_LOCK_TIME);
         Vec3d n = new Vec3d(-movement.x, 0.0, -movement.z);
         if (n.lengthSquared() > 1e-9) {
             WALL_LOCK_NORMAL.put(entity.getUuid(), n.normalize());
@@ -73,7 +92,7 @@ public final class PylonWallPhysics {
 
     private static double calculatePushAmount(Entity entity) {
         double speed = entity.getVelocity().horizontalLength();
-        double peakSpeed = 0.30; // Bad practice defining this here but I'm lazy
+        double peakSpeed = 0.5; // Bad practice defining this here but I'm lazy
 
         double t = speed / peakSpeed;
         if (t < 0.0) t = 0.0;
@@ -82,18 +101,49 @@ public final class PylonWallPhysics {
         return MIN_PUSH + (MAX_PUSH - MIN_PUSH) * t;
     }
 
-    private static PylonControllerBlockEntity findContainingWallController(ServerWorld serverWorld, Entity entity, Vec3d start) {
-        for(BlockPos cPos : PylonControllerState.get(serverWorld).getAll()) {
-            BlockEntity be = serverWorld.getBlockEntity(cPos);
-            if(!(be instanceof PylonControllerBlockEntity ctrl)) continue;
+    private static PylonControllerBlockEntity findContainingWallController(World world, Entity entity, Vec3d start) {
+        // CLIENT: only predict for the local player to avoid messing with other entities
+        if (world.isClient) {
+            if (!(entity instanceof PlayerEntity pe) || !pe.isMainPlayer()) return null;
 
-            if(ctrl.getOwnerMode() != PylonMode.WALL) continue;
+            BlockPos center = entity.getBlockPos();
+            int r = (int) PylonControllerBlockEntity.LINK_RADIUS;
 
-            UUID owner = ctrl.getOwner();
+            // scan nearby blocks for controller BEs
+            for (BlockPos p : BlockPos.iterate(center.add(-r, -8, -r), center.add(r, 8, r))) {
+                if (!world.isChunkLoaded(p)) continue;
+                BlockEntity be = world.getBlockEntity(p);
+                if (!(be instanceof PylonControllerBlockEntity ctrl)) continue;
 
+                if (!(ctrl.getOwnerMode() == PylonMode.WALL)) continue;
+
+                UUID owner = ctrl.getOwner();
 //            if(owner != null && entity instanceof PlayerEntity pe && Objects.equals(pe.getUuid(), owner)) continue;
 
-            if(ctrl.isPosInsideHull(start.x, start.y, start.z)) return ctrl;
+
+                if (!ctrl.isPosInsideHull(start.x, start.y, start.z)) continue;
+
+                return ctrl;
+            }
+            return null;
+        }
+
+        // SERVER: use PersistentState list (fast)
+        ServerWorld sw = (ServerWorld) world;
+        for (BlockPos cPos : PylonControllerState.get(sw).getAll()) {
+            if (!sw.isChunkLoaded(cPos)) continue;
+            BlockEntity be = sw.getBlockEntity(cPos);
+            if (!(be instanceof PylonControllerBlockEntity ctrl)) continue;
+
+            if (!(ctrl.getOwnerMode() == PylonMode.WALL)) continue;
+
+            UUID owner = ctrl.getOwner();
+//            if(owner != null && entity instanceof PlayerEntity pe && Objects.equals(pe.getUuid(), owner)) continue;
+
+
+            if (!ctrl.isPosInsideHull(start.x, start.y, start.z)) continue;
+
+            return ctrl;
         }
         return null;
     }

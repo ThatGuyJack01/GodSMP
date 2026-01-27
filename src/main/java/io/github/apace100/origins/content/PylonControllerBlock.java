@@ -61,7 +61,6 @@ public class PylonControllerBlock extends BlockWithEntity {
         super.onStateReplaced(state, world, pos, newState, moved);
     }
 
-    @Nullable
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(World world, BlockState state, BlockEntityType<T> type) {
         return world.isClient ? null : (w, p, s, be) -> {

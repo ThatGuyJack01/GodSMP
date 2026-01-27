@@ -47,6 +47,8 @@ public class PylonControllerBlockEntity extends BlockEntity implements OwnablePy
 
     private boolean hullDirty = true;
     private long nextRebuildTick = 0L;
+    private boolean pendingRefresh = true;
+    private boolean rebuilding = false;
 
     private List<BlockPos> hullVerticesClosed = List.of(); // ordered + last==first
     private int yMin = 0, yMax = 0;
@@ -108,25 +110,42 @@ public class PylonControllerBlockEntity extends BlockEntity implements OwnablePy
 
         for(BlockPos other : candidates) {
             if(other.equals(this.pos)) continue;
+            if (!serverWorld.isChunkLoaded(other)) continue;
             var blockEntity = serverWorld.getBlockEntity(other);
             if(blockEntity instanceof PylonControllerBlockEntity ctrl) {
                 ctrl.networkId = id;
+                ctrl.markDirty();
+                ctrl.hullDirty = true;
+                ctrl.nextRebuildTick = serverWorld.getTime() + REBUILD_DEBOUNCE_TICKS;
             }
         }
     }
 
     private static UUID uuidFromPos(ServerWorld world, BlockPos pos) {
         String dim = world.getRegistryKey().getValue().toString();
-        String key = "yourmod:controller@" + dim + ":" + pos.getX() + "," + pos.getY() + "," + pos.getZ();
+        String key = Origins.MODID+":controller@" + dim + ":" + pos.getX() + "," + pos.getY() + "," + pos.getZ();
         return UUID.nameUUIDFromBytes(key.getBytes(StandardCharsets.UTF_8));
     }
 
     public void serverTick() {
         if (!(world instanceof ServerWorld serverWorld)) return;
 
+        if (pendingRefresh) {
+            // Defer refresh until we are safely ticking.
+            if (!rebuilding) {
+                rebuilding = true;
+                try {
+                    forceRefresh(serverWorld);
+                } finally {
+                    rebuilding = false;
+                }
+            }
+            pendingRefresh = false;
+        }
+
         long time = serverWorld.getTime();
 
-        if(time - lastUpdateTick >= UPDATE_INTERVAL || getOwnerMode() == PylonMode.WALL) {
+        if(time - lastUpdateTick >= UPDATE_INTERVAL) {
             lastUpdateTick = time;
             runModeTick(serverWorld, time);
         }
@@ -136,6 +155,7 @@ public class PylonControllerBlockEntity extends BlockEntity implements OwnablePy
         List<BlockPos> members = new ArrayList<>();
         members.add(this.pos);
         for(BlockPos other : neighborControllers) {
+            if (!serverWorld.isChunkLoaded(other)) continue;
             var blockEntity = serverWorld.getBlockEntity(other);
             if(blockEntity instanceof PylonControllerBlockEntity ctrl && networkId.equals(ctrl.networkId)) {
                 members.add(other);
@@ -145,6 +165,7 @@ public class PylonControllerBlockEntity extends BlockEntity implements OwnablePy
         Set<BlockPos> union = new HashSet<>(localPylons);
         for(BlockPos other : members) {
             if(other.equals(this.pos)) continue;
+            if (!serverWorld.isChunkLoaded(other)) continue;
             var blockEntity = serverWorld.getBlockEntity(other);
             if(blockEntity instanceof PylonControllerBlockEntity ctrl) {
                 union.addAll(ctrl.localPylons);
@@ -176,6 +197,7 @@ public class PylonControllerBlockEntity extends BlockEntity implements OwnablePy
         nbt.putUuid("net", networkId);
         nbt.putInt("yMin", yMin);
         nbt.putInt("yMax", yMax);
+
         if (owner != null) nbt.putUuid("Owner", owner);
     }
 
@@ -186,20 +208,22 @@ public class PylonControllerBlockEntity extends BlockEntity implements OwnablePy
         yMin = nbt.getInt("yMin");
         yMax = nbt.getInt("yMax");
         owner = nbt.containsUuid("Owner") ? nbt.getUuid("Owner") : null;
+
         hullDirty = true;
+        pendingRefresh = true;
     }
 
     @Override
     public void setWorld(World world) {
         super.setWorld(world);
-        if(world instanceof ServerWorld serverWorld) forceRefresh(serverWorld);
+        pendingRefresh = true;
     }
 
     private void refresh(ServerWorld world) {
         localPylons.clear();
         double r2 = SCAN_RADIUS * SCAN_RADIUS;
         for(BlockPos p : PylonState.get(world).getPositions()) {
-//            if(!world.isChunkLoaded(p)) continue;
+            if(!world.isChunkLoaded(p)) continue;
             if (p.getSquaredDistance(this.pos) <= r2) {
                 if(this.owner != null) {
                     BlockEntity be = world.getBlockEntity(p);
@@ -217,7 +241,7 @@ public class PylonControllerBlockEntity extends BlockEntity implements OwnablePy
         double lr2 = LINK_RADIUS * LINK_RADIUS;
         for(BlockPos c : PylonControllerState.get(world).getAll()) {
             if(c.equals(this.pos)) continue;
-//            if(!world.isChunkLoaded(c)) continue;
+            if(!world.isChunkLoaded(c)) continue;
             if(c.getSquaredDistance(this.pos) <= lr2) {
                 BlockEntity be = world.getBlockEntity(c);
                 if(!(be instanceof PylonControllerBlockEntity otherCtrl)) continue;
