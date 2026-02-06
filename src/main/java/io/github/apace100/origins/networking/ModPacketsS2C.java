@@ -46,6 +46,8 @@ public class ModPacketsS2C {
             ClientPlayNetworking.registerReceiver(ModPackets.BADGE_LIST, ModPacketsS2C::receiveBadgeList);
         }));
 
+        ClientPlayNetworking.registerGlobalReceiver(ModPackets.PYLON_SYNC_DATA, PylonSyncDataS2CPacket::receive);
+
     }
 
     @Environment(EnvType.CLIENT)

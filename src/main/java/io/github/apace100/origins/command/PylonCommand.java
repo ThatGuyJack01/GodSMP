@@ -236,8 +236,7 @@ public class PylonCommand {
             return 0;
         }
 
-        // 2) Make sure hull is up to date (uses your strong resync)
-        ctrl.forceRefresh(sw); // or resyncIfEmpty(sw) if that’s what you have
+        ctrl.forceRefresh(sw);
         ctrl.serverTick();
 
         var hull = ctrl.getHullClosed();
@@ -249,7 +248,6 @@ public class PylonCommand {
         int yMin = ctrl.getYMin();
         int yMax = ctrl.getYMax();
 
-        // 3) Build an AABB around hull extents
         int minX = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE;
         int minZ = Integer.MAX_VALUE, maxZ = Integer.MIN_VALUE;
         for (BlockPos p : hull) {
@@ -259,20 +257,17 @@ public class PylonCommand {
             if (p.getZ() > maxZ) maxZ = p.getZ();
         }
 
-        // Expand by 1 block to fully cover edges
         var box = new net.minecraft.util.math.Box(
                 minX,      yMin,      minZ,
                 maxX + 1,  yMax + 1,  maxZ + 1
         );
 
-        // 4) Collect entities in box and filter precisely with isEntityInside
         java.util.List<net.minecraft.entity.Entity> inside = sw.getOtherEntities(
                 null,
                 box,
                 e -> ctrl.isEntityInside(e)
         );
 
-        // 5) Report results
         int count = inside.size();
         BlockPos finalNearest = nearest;
         src.sendFeedback(() -> net.minecraft.text.Text.literal(

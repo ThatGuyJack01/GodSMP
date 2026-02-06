@@ -34,7 +34,6 @@ public final class PylonArea {
         Map<Long, BlockPos> unique = new HashMap<>();
         for (BlockPos p : pylons) {
             long key = (((long)p.getX()) << 32) ^ (p.getZ() & 0xffffffffL);
-            // Keep *one* representative BlockPos per (x,z). Prefer lowest y to be predictable.
             BlockPos prev = unique.get(key);
             if (prev == null || p.getY() < prev.getY()) unique.put(key, p);
         }
@@ -89,7 +88,7 @@ public final class PylonArea {
             }
             upper.add(i);
         }
-        // concatenate; last of each list is the start of the other, skip duplicates
+
         lower.remove(lower.size()-1);
         upper.remove(upper.size()-1);
         lower.addAll(upper);
@@ -97,7 +96,6 @@ public final class PylonArea {
     }
 
     private static float cross(Vec2f a, Vec2f b, Vec2f c) {
-        // cross of (b-a) x (c-b) on XZ plane, using Vec2f(x,z) where y field stores z
         float abx = b.x - a.x, abz = b.y - a.y;
         float bcx = c.x - b.x, bcz = c.y - b.y;
         return abx * bcz - abz * bcx;
@@ -131,7 +129,7 @@ public final class PylonArea {
         int n = verticesXZ.size();
         if (n == 0) return Vec3d.ZERO;
         Vec2f v = verticesXZ.get(i % n);
-        double y = (yMin + yMax) * 0.5; // simple mid-band; you can expose options
+        double y = (yMin + yMax) * 0.5;
         return new Vec3d(v.x, y, v.y);
     }
 
@@ -193,7 +191,6 @@ public final class PylonArea {
 
         static YPolicy fixedBand(int below, int above) {
             return all -> {
-                // Fallback needs a reference; we’ll approximate with mean if no explicit Y provided.
                 if (all.isEmpty()) return new int[]{0, 0};
                 long sum = 0;
                 int c = 0;

@@ -5,11 +5,13 @@ import io.github.apace100.origins.content.pylon.OwnablePylon;
 import io.github.apace100.origins.content.pylon.PylonControllerState;
 import io.github.apace100.origins.content.pylon.PylonPermissions;
 import io.github.apace100.origins.content.pylon.PylonState;
+import io.github.apace100.origins.util.PlayerPylonDataCache;
 import net.minecraft.block.BlockRenderType;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.BlockWithEntity;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
@@ -38,6 +40,8 @@ public class PylonBlock extends BlockWithEntity {
             PylonState.get(serverWorld).add(pos);
             PylonControllerState.notifyPylonChanged(serverWorld, pos, true, PylonControllerBlockEntity.LINK_RADIUS);
 
+            PlayerPylonDataCache.updatePlayersInWorld(serverWorld);
+
             BlockEntity be = world.getBlockEntity(pos);
             if(placer instanceof ServerPlayerEntity player) {
                 if(be instanceof OwnablePylon ownable) {
@@ -49,6 +53,13 @@ public class PylonBlock extends BlockWithEntity {
                 }
             }
         }
+    }
+
+    @Override
+    public void onBreak(World world, BlockPos pos, BlockState state, PlayerEntity player) {
+        super.onBreak(world, pos, state, player);
+        if(!world.isClient && world instanceof ServerWorld serverWorld)
+            serverWorld.getServer().execute(() -> PlayerPylonDataCache.updatePlayersInWorld(serverWorld));
     }
 
     @Override

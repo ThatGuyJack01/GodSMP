@@ -12,6 +12,11 @@ import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtElement;
+import net.minecraft.nbt.NbtList;
+import net.minecraft.nbt.NbtLong;
+import net.minecraft.network.packet.s2c.play.BlockEntityUpdateS2CPacket;
+import net.minecraft.registry.RegistryWrapper;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
@@ -32,6 +37,8 @@ public class PylonControllerBlockEntity extends BlockEntity implements OwnablePy
 
     public static final double UPDATE_INTERVAL = 20; // ticks
     private long lastUpdateTick;
+
+    private PylonMode cachedMode = PylonMode.NONE;
 
     private final Map<UUID, Vec3d> trappedEntities = new HashMap<>();
 
@@ -182,6 +189,11 @@ public class PylonControllerBlockEntity extends BlockEntity implements OwnablePy
         this.yMin = area.getYMin();
         this.yMax = area.getYMax();
 
+        cachedMode = getOwnerMode(); // server side, authoritative
+        if (serverWorld != null) {
+            serverWorld.getChunkManager().markForUpdate(this.pos);
+        }
+
         this.hullDirty = false;
         this.markDirty();
     }
@@ -204,13 +216,34 @@ public class PylonControllerBlockEntity extends BlockEntity implements OwnablePy
     @Override
     public void readNbt(NbtCompound nbt) {
         super.readNbt(nbt);
+
         if (nbt.containsUuid("net")) networkId = nbt.getUuid("net");
         yMin = nbt.getInt("yMin");
         yMax = nbt.getInt("yMax");
         owner = nbt.containsUuid("Owner") ? nbt.getUuid("Owner") : null;
 
-        hullDirty = true;
-        pendingRefresh = true;
+        if (nbt.contains("mode", NbtElement.STRING_TYPE)) {
+            try {
+                cachedMode = PylonMode.valueOf(nbt.getString("mode"));
+            } catch (IllegalArgumentException ignored) {
+                cachedMode = PylonMode.NONE;
+            }
+        }
+
+        if (nbt.contains("Hull", NbtElement.LIST_TYPE)) {
+            NbtList hull = nbt.getList("Hull", NbtElement.LONG_TYPE);
+            List<BlockPos> closed = new ArrayList<>(hull.size());
+            for (int i = 0; i < hull.size(); i++) {
+                closed.add(BlockPos.fromLong(((NbtLong) hull.get(i)).longValue()));
+            }
+            hullVerticesClosed = closed;
+        }
+
+        // Only servers rebuild networks/hulls.
+        if (world == null || !world.isClient) {
+            hullDirty = true;
+            pendingRefresh = true;
+        }
     }
 
     @Override
@@ -261,10 +294,10 @@ public class PylonControllerBlockEntity extends BlockEntity implements OwnablePy
 
     public boolean isEntityInside(Entity e) {
         var pos = e.getPos();
-        return isPosInsideHull(pos.x, pos.y, pos.z);
+        return isPosInside(pos.x, pos.y, pos.z);
     }
 
-    public boolean isPosInsideHull(double x, double y, double z) {
+    public boolean isPosInside(double x, double y, double z) {
         if (hullVerticesClosed == null || hullVerticesClosed.isEmpty()) return false;
 
         if (y < this.yMin || y > this.yMax) return false;
@@ -309,6 +342,33 @@ public class PylonControllerBlockEntity extends BlockEntity implements OwnablePy
     }
 
     @Override
+    public BlockEntityUpdateS2CPacket toUpdatePacket() {
+        return BlockEntityUpdateS2CPacket.create(this, be -> writeObservableNbt(new NbtCompound()));
+    }
+
+    public NbtCompound toInitialChunkDataNbt(RegistryWrapper.WrapperLookup registryLookup) {
+        return writeObservableNbt(new NbtCompound());
+    }
+
+    // Keep your existing writeNbt for disk saving; this is for client-visible data.
+    private NbtCompound writeObservableNbt(NbtCompound nbt) {
+        nbt.putUuid("net", networkId);
+        nbt.putInt("yMin", yMin);
+        nbt.putInt("yMax", yMax);
+        nbt.putString("mode", cachedMode.name());
+        if (owner != null) nbt.putUuid("Owner", owner);
+
+        // hull list
+        NbtList hull = new NbtList();
+        for (BlockPos p : hullVerticesClosed) {
+            hull.add(NbtLong.of(p.asLong()));
+        }
+        nbt.put("Hull", hull);
+
+        return nbt;
+    }
+
+    @Override
     public @Nullable UUID getOwner() {
         return owner;
     }
@@ -319,6 +379,9 @@ public class PylonControllerBlockEntity extends BlockEntity implements OwnablePy
     }
 
     public PylonMode getOwnerMode() {
+        if (world != null && world.isClient) {
+            return cachedMode;
+        }
         if(owner == null || !(world instanceof ServerWorld sw)) {
             return PylonMode.NONE;
         }
@@ -326,10 +389,15 @@ public class PylonControllerBlockEntity extends BlockEntity implements OwnablePy
     }
 
     private void runModeTick(ServerWorld serverWorld, long time) {
+        PylonMode mode = getOwnerMode();
+        if (mode != cachedMode) {
+            cachedMode = mode;
+            serverWorld.getChunkManager().markForUpdate(this.pos);
+        }
+
         if(hullVerticesClosed == null || hullVerticesClosed.size() < 3) return;
         if(owner == null) return;
 
-        PylonMode mode = getOwnerMode();
         int minX = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE;
         int minZ = Integer.MAX_VALUE, maxZ = Integer.MIN_VALUE;
 

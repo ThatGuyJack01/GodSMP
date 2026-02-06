@@ -1,197 +1,245 @@
 package io.github.apace100.origins.content.pylon;
 
-import io.github.apace100.origins.Origins;
 import io.github.apace100.origins.content.PylonControllerBlockEntity;
+import io.github.apace100.origins.util.IEntityDataSaver;
+import io.github.apace100.origins.util.PlayerPylonDataCache;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec2f;
+import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.entity.Entity;
 import net.minecraft.world.World;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
-public final class PylonWallPhysics {
-
-    private static final double EPS = 1e-3; // Prevent jitter
-    private static final double MIN_PUSH = 0.06;
-    private static final double MAX_PUSH = 0.55;
-    private static final int WALL_LOCK_TIME = 6;
-
-    private static final Map<UUID, Integer> WALL_LOCK_TICKS = new HashMap<>();
-    private static final Map<UUID, Vec3d> WALL_LOCK_NORMAL = new HashMap<>();
-
-
+public class PylonWallPhysics {
     private PylonWallPhysics() {}
 
     public static Vec3d clipMovementIfLeavingHull(Entity entity, Vec3d movement) {
-        double INWARD_PUSH = calculatePushAmount(entity);
-
-        Integer lock = WALL_LOCK_TICKS.get(entity.getUuid());
-        if (lock != null && lock > 0) {
-            WALL_LOCK_TICKS.put(entity.getUuid(), lock - 1);
-
-            Vec3d n = WALL_LOCK_NORMAL.get(entity.getUuid());
-            if (n == null) {
-                return new Vec3d(0.0, movement.y, 0.0);
-            }
-
-            // 1) Cancel OUTWARD velocity component every tick
-            Vec3d vel = entity.getVelocity();
-            double vDot = vel.dotProduct(n);
-            if (vDot < 0.0) {
-                // vel has component pointing OUTWARD (-n), remove it
-                entity.setVelocity(vel.subtract(n.multiply(vDot)));
-            }
-
-            // 2) Remove OUTWARD movement component this tick
-            double mDot = movement.dotProduct(n);
-            Vec3d clipped = movement;
-            if (mDot < 0.0) {
-                clipped = movement.subtract(n.multiply(mDot));
-            }
-
-            // 3) Apply inward push every tick (your “must be inside lock” rule)
-            Vec3d push = new Vec3d(n.x * INWARD_PUSH, 0.0, n.z * INWARD_PUSH);
-
-            return new Vec3d(clipped.x + push.x, movement.y, clipped.z + push.z);
-        }
-        WALL_LOCK_TICKS.remove(entity.getUuid());
-        WALL_LOCK_NORMAL.remove(entity.getUuid());
-
-
-        if(movement.x == 0.0 && movement.z == 0.0) return movement;
-
-        Vec3d start = entity.getPos();
-        Vec3d end = start.add(movement);
-
-        PylonControllerBlockEntity ctrl = findContainingWallController(entity.getWorld(), entity, start);
-        if(ctrl == null) return movement;
-
-        if(ctrl.isPosInsideHull(end.x, end.y, end.z)) return movement;
-
-        double tHit = earliestHullHitT(ctrl.getHullClosed(), start, end);
-        if(tHit < 0.0) {
-            return new Vec3d(0.0, movement.y, 0.0);
-        }
-
-        WALL_LOCK_TICKS.put(entity.getUuid(), WALL_LOCK_TIME);
-        Vec3d n = new Vec3d(-movement.x, 0.0, -movement.z);
-        if (n.lengthSquared() > 1e-9) {
-            WALL_LOCK_NORMAL.put(entity.getUuid(), n.normalize());
-        }
-
-        double factor = Math.max(0.0, tHit - EPS);
-        return new Vec3d(movement.x * factor, movement.y, movement.z * factor);
+        World world = entity.getWorld();
+        if(!world.isClient && world instanceof ServerWorld serverWorld)
+            return validateMovement(entity, movement, PylonState.get(serverWorld).getPositions(), (Set<BlockPos>) PylonControllerState.get(serverWorld).getAll());
+        if(world.isClient) return validateMovement(entity, movement, PlayerPylonDataCache.getPylonNodes((IEntityDataSaver) entity), PlayerPylonDataCache.getPylonControllers((IEntityDataSaver) entity));
+        return movement;
     }
 
-    private static double calculatePushAmount(Entity entity) {
-        double speed = entity.getVelocity().horizontalLength();
-        double peakSpeed = 0.5; // Bad practice defining this here but I'm lazy
+    private static Vec3d validateMovement(Entity entity, Vec3d movement, Set<BlockPos> nodes, Set<BlockPos>  controllers) {
+        World world = entity.getWorld();
+        for (BlockPos controllerPos : controllers) {
+            if (!world.isChunkLoaded(controllerPos)) continue;
+            BlockEntity blockEntity = world.getBlockEntity(controllerPos);
 
-        double t = speed / peakSpeed;
-        if (t < 0.0) t = 0.0;
-        if (t > 1.0) t = 1.0;
+            if (!(blockEntity instanceof PylonControllerBlockEntity ctrl)) continue;
 
-        return MIN_PUSH + (MAX_PUSH - MIN_PUSH) * t;
-    }
-
-    private static PylonControllerBlockEntity findContainingWallController(World world, Entity entity, Vec3d start) {
-        // CLIENT: only predict for the local player to avoid messing with other entities
-        if (world.isClient) {
-            if (!(entity instanceof PlayerEntity pe) || !pe.isMainPlayer()) return null;
-
-            BlockPos center = entity.getBlockPos();
-            int r = (int) PylonControllerBlockEntity.LINK_RADIUS;
-
-            // scan nearby blocks for controller BEs
-            for (BlockPos p : BlockPos.iterate(center.add(-r, -8, -r), center.add(r, 8, r))) {
-                if (!world.isChunkLoaded(p)) continue;
-                BlockEntity be = world.getBlockEntity(p);
-                if (!(be instanceof PylonControllerBlockEntity ctrl)) continue;
-
-                if (!(ctrl.getOwnerMode() == PylonMode.WALL)) continue;
-
-                UUID owner = ctrl.getOwner();
-//            if(owner != null && entity instanceof PlayerEntity pe && Objects.equals(pe.getUuid(), owner)) continue;
-
-
-                if (!ctrl.isPosInsideHull(start.x, start.y, start.z)) continue;
-
-                return ctrl;
-            }
-            return null;
-        }
-
-        // SERVER: use PersistentState list (fast)
-        ServerWorld sw = (ServerWorld) world;
-        for (BlockPos cPos : PylonControllerState.get(sw).getAll()) {
-            if (!sw.isChunkLoaded(cPos)) continue;
-            BlockEntity be = sw.getBlockEntity(cPos);
-            if (!(be instanceof PylonControllerBlockEntity ctrl)) continue;
-
-            if (!(ctrl.getOwnerMode() == PylonMode.WALL)) continue;
+            if (ctrl.getOwnerMode() != PylonMode.WALL) continue;
 
             UUID owner = ctrl.getOwner();
 //            if(owner != null && entity instanceof PlayerEntity pe && Objects.equals(pe.getUuid(), owner)) continue;
 
-
-            if (!ctrl.isPosInsideHull(start.x, start.y, start.z)) continue;
-
-            return ctrl;
-        }
-        return null;
-    }
-
-    private static double earliestHullHitT(List<BlockPos> hull, Vec3d start, Vec3d end) {
-        if(hull == null || hull.size() < 2) return -1.0;
-
-        Vec2f p = new Vec2f((float) start.x, (float) start.z);
-        Vec2f q = new Vec2f((float) end.x, (float) end.z);
-
-        double bestT = Double.POSITIVE_INFINITY;
-
-        int n = hull.size();
-
-        for(int i = 0; i < n; i++) {
-            BlockPos aPos = hull.get(i);
-            BlockPos bPos = hull.get((i+1) % n);
-
-            Vec2f a = new Vec2f(aPos.getX() + 0.5f, aPos.getZ() + 0.5f);
-            Vec2f b = new Vec2f(bPos.getX() + 0.5f, bPos.getZ() + 0.5f);
-
-            Double t = segmentIntersectionT(p, q, a, b);
-            if (t != null && t >= 0.0 && t <= 1.0 && t < bestT) {
-                bestT = t;
+            if (ctrl.isEntityInside(entity)) {
+                Box box = entity.getBoundingBox().stretch(movement);
+                boolean test = boxHitsArea(box, ctrl);
+                if (test) return calculateMovement(entity, movement, ctrl);
             }
         }
-
-        return bestT == Double.POSITIVE_INFINITY ? -1.0 : bestT;
+        return movement;
     }
 
-    private static Double segmentIntersectionT(Vec2f p, Vec2f q, Vec2f a, Vec2f b) {
-        float rX = q.x - p.x;
-        float rY = q.y - p.y;
-        float sX = b.x - a.x;
-        float sY = b.y - a.y;
+    private static boolean boxHitsArea(Box box, PylonControllerBlockEntity ctrl) {
+        double minX = box.minX, minY = box.minY, minZ = box.minZ;
+        double maxX = box.maxX, maxY = box.maxY, maxZ = box.maxZ;
 
-        float denom = rX * sY - rY * sX;
-        if (Math.abs(denom) < 1e-8f) return null;
+        double[] xs = {minX, maxX};
+        double[] ys = {minY, maxY};
+        double[] zs = {minZ, maxZ};
 
-        float aPX = a.x - p.x;
-        float aPY = a.y - p.y;
+        for (double x : xs)
+            for (double y : ys)
+                for (double z : zs)
+                    if(ctrl.isPosInside(x, y, z)) return true;
 
-        float t = (aPX * sY - aPY * sX) / denom;
-        float u = (aPX * rY - aPY * rX) / denom;
+        // center checks just in case
+        double cx = (minX + maxX)/2.0;
+        double cy = (minY + maxY)/2.0;
+        double cz = (minZ + maxZ)/2.0;
+        if(ctrl.isPosInside(cx, cy, cz)) return true;
 
-        if (t >= 0f && t <= 1f && u >= 0f && u <= 1f) {
-            return (double) t;
+        if (ctrl.isPosInside(minX, cy, cz)) return true;
+        if (ctrl.isPosInside(maxX, cy, cz)) return true;
+        if (ctrl.isPosInside(cx, minY, cz)) return true;
+        if (ctrl.isPosInside(cx, maxY, cz)) return true;
+        if (ctrl.isPosInside(cx, cy, minZ)) return true;
+        if (ctrl.isPosInside(cx, cy, maxZ)) return true;
+
+        return false;
+    }
+
+    private static Vec3d calculateMovement(Entity entity, Vec3d movement, PylonControllerBlockEntity ctrl) {
+        Box bb = entity.getBoundingBox();
+        double r = 0.5 * Math.max(bb.maxX - bb.minX, bb.maxZ - bb.minZ);
+
+        List<Vec2> verts = getHullXZ(ctrl);
+        if (verts.size() < 3) return movement;
+
+        Vec2[] inwardNormals = buildInwardNormals(verts);
+
+        Vec2 p0 = new Vec2(entity.getX(), entity.getZ());
+        Vec2 v0 = new Vec2(movement.x, movement.z);
+
+        if (Math.abs(v0.x) < 1e-12 && Math.abs(v0.z) < 1e-12) return movement;
+
+        boolean startInside = ctrl.isPosInside(entity.getX(), entity.getY(), entity.getZ());
+
+        double target = startInside ? r : -r;
+
+        double d0 = minDistToEdges(p0, verts, inwardNormals);
+        if (startInside && d0 < r) {
+            int k = minDistEdgeIndex(p0, verts, inwardNormals);
+            Vec2 n = inwardNormals[k];
+            double push = (r - d0) + EPS;
+            p0 = p0.add(n.mul(push));
+        } else if (!startInside && d0 > -r) {
+            int k = minDistEdgeIndex(p0, verts, inwardNormals);
+            Vec2 n = inwardNormals[k].mul(-1);
+            double push = (d0 + r) + EPS;
+            p0 = p0.add(n.mul(push));
         }
-        return null;
+
+        Vec2 startP = p0;
+        Vec2 p = p0;
+        Vec2 v = v0;
+
+        final double cornerTol = 2e-3;
+
+        for (int iter = 0; iter < 3; iter++) {
+            if (Math.abs(v.x) < 1e-12 && Math.abs(v.z) < 1e-12) break;
+
+            Vec2 pEnd = p.add(v);
+            double dEnd = minDistToEdges(pEnd, verts, inwardNormals);
+            boolean okEnd = startInside ? (dEnd >= target) : (dEnd <= target);
+            if (okEnd) break;
+
+            double lo = 0.0, hi = 1.0;
+            for (int i = 0; i < 22; i++) {
+                double mid = (lo + hi) * 0.5;
+                Vec2 pm = p.add(v.mul(mid));
+                double dm = minDistToEdges(pm, verts, inwardNormals);
+                boolean ok = startInside ? (dm >= target) : (dm <= target);
+                if (ok) lo = mid; else hi = mid;
+            }
+
+            double t = Math.max(0.0, lo - 1e-6);
+            Vec2 pHit = p.add(v.mul(t));
+
+            Vec2 rem = v.mul(1.0 - t);
+
+            for (int e = 0; e < verts.size(); e++) {
+                Vec2 inward = inwardNormals[e];
+                Vec2 nAllowed = startInside ? inward : inward.mul(-1);
+
+                double de = pHit.sub(verts.get(e)).dot(inward);
+
+                boolean active = startInside
+                        ? (de <= r + cornerTol)
+                        : (de >= -r - cornerTol);
+
+                if (!active) continue;
+
+                double into = rem.dot(nAllowed);
+                if (into < 0) rem = rem.sub(nAllowed.mul(into));
+            }
+
+            p = p.add(v.mul(t));
+            v = rem;
+        }
+
+        Vec2 out = p.sub(startP).add(v);
+        return new Vec3d(out.x, movement.y, out.z);
+
+    }
+
+    private static final double EPS = 1e-4;
+
+    private record Vec2(double x, double z) {
+        Vec2 add(Vec2 o) { return new Vec2(x + o.x, z + o.z); }
+        Vec2 mul(double s) { return new Vec2(x * s, z * s); }
+        Vec2 sub(Vec2 o) { return new Vec2(x - o.x, z - o.z); }
+        double dot(Vec2 o) { return x * o.x + z * o.z; }
+        double len() { return Math.sqrt(x * x + z * z); }
+        Vec2 norm() {
+            double l = len();
+            return l <= 1e-12 ? new Vec2(0, 0) : new Vec2(x / l, z / l);
+        }
+    }
+
+    private static List<Vec2> getHullXZ(PylonControllerBlockEntity ctrl) {
+        var hull = ctrl.getHullClosed();
+        int n = hull.size();
+        if (n < 3) return List.of();
+
+        BlockPos first = hull.get(0);
+        BlockPos last = hull.get(n - 1);
+        if (first.getX() == last.getX() && first.getZ() == last.getZ()) n -= 1;
+        if (n < 3) return List.of();
+
+        var out = new java.util.ArrayList<Vec2>(n);
+        for (int i = 0; i < n; i++) {
+            BlockPos p = hull.get(i);
+            out.add(new Vec2(p.getX() + 0.5, p.getZ() + 0.5));
+        }
+        return out;
+    }
+
+    private static boolean isCCW(List<Vec2> v) {
+        double a2 = 0.0;
+        for (int i = 0; i < v.size(); i++) {
+            Vec2 a = v.get(i);
+            Vec2 b = v.get((i + 1) % v.size());
+            a2 += a.x * b.z - b.x * a.z;
+        }
+        return a2 > 0.0;
+    }
+
+    private static Vec2[] buildInwardNormals(List<Vec2> verts) {
+        boolean ccw = isCCW(verts);
+        int n = verts.size();
+        Vec2[] normals = new Vec2[n];
+
+        for (int i = 0; i < n; i++) {
+            Vec2 a = verts.get(i);
+            Vec2 b = verts.get((i + 1) % n);
+            double dx = b.x - a.x;
+            double dz = b.z - a.z;
+
+            Vec2 inward = ccw ? new Vec2(-dz, dx) : new Vec2(dz, -dx);
+            normals[i] = inward.norm();
+        }
+        return normals;
+    }
+
+    private static double minDistToEdges(Vec2 p, List<Vec2> verts, Vec2[] inwardNormals) {
+        double min = Double.POSITIVE_INFINITY;
+        for (int i = 0; i < verts.size(); i++) {
+            Vec2 vi = verts.get(i);
+            double d = p.sub(vi).dot(inwardNormals[i]);
+            if (d < min) min = d;
+        }
+        return min;
+    }
+
+    private static int minDistEdgeIndex(Vec2 p, List<Vec2> verts, Vec2[] inwardNormals) {
+        int idx = 0;
+        double min = Double.POSITIVE_INFINITY;
+        for (int i = 0; i < verts.size(); i++) {
+            Vec2 vi = verts.get(i);
+            double d = p.sub(vi).dot(inwardNormals[i]);
+            if (d < min) { min = d; idx = i; }
+        }
+        return idx;
     }
 }

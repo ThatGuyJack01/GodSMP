@@ -17,8 +17,8 @@ import java.util.HashSet;
 import java.util.Set;
 
 public class PylonControllerState extends PersistentState {
-    private static final String STORAGE_KEY = Origins.MODID + "_pylon_controllers";
-    private static final String CONTROLLER_KEY = "Controllers";
+    public static final String STORAGE_KEY = Origins.MODID + "_pylon_controllers";
+    public static final String CONTROLLER_KEY = "Controllers";
     private static final PersistentState.Type<PylonControllerState> TYPE = new PersistentState.Type<>(PylonControllerState::new, PylonControllerState::fromNbt, null);
 
 

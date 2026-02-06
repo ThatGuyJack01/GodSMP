@@ -16,8 +16,8 @@ import java.util.HashSet;
 import java.util.Set;
 
 public class PylonState extends PersistentState {
-    private static final String STORAGE_KEY = Origins.MODID + "_pylons";
-    private static final String POSITIONS_KEY = "Positions";
+    public static final String STORAGE_KEY = Origins.MODID + "_pylons";
+    public static final String POSITIONS_KEY = "Positions";
     private static final PersistentState.Type<PylonState> TYPE = new PersistentState.Type<>(PylonState::new, PylonState::fromNbt, null);
 
     private final Set<BlockPos> pylons = new HashSet<>();
@@ -55,7 +55,7 @@ public class PylonState extends PersistentState {
         return false;
     }
 
-    public Collection<BlockPos> getPositions() {
+    public Set<BlockPos> getPositions() {
         return Collections.unmodifiableSet(pylons);
     }
 
