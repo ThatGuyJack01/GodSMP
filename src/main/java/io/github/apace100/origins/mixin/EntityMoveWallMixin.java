@@ -19,9 +19,6 @@ public class EntityMoveWallMixin {
     )
     private Vec3d godsmp$adjustMovementForPylonCollisions(Vec3d movement) {
         Vec3d v = PylonWallPhysics.clipMovementIfLeavingHull((Entity)(Object)this, movement);
-/**        if(movement.equals(v))
-            if ((Object)this instanceof PlayerEntity player)
-                player.sendMessage(Text.of("Returning: " + v.toString())); **/
         return v;
     }
 }
