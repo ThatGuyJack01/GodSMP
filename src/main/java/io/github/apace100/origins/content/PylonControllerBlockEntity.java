@@ -57,7 +57,7 @@ public class PylonControllerBlockEntity extends BlockEntity implements OwnablePy
     private boolean pendingRefresh = true;
     private boolean rebuilding = false;
 
-    private List<BlockPos> hullVerticesClosed = List.of(); // ordered + last==first
+    private List<BlockPos> hullVerticesClosed = List.of();
     private int yMin = 0, yMax = 0;
 
     private UUID owner;
@@ -75,13 +75,15 @@ public class PylonControllerBlockEntity extends BlockEntity implements OwnablePy
 
         switch (type) {
             case PYLON_ADDED -> {
-                if(inPylonRange) touched = localPylons.add(changed);
+                if(inPylonRange && isPylonOwnedByController(serverWorld, changed))
+                    touched = localPylons.add(changed);
             }
             case PYLON_REMOVED -> {
                 if(inPylonRange) touched = localPylons.remove(changed);
             }
             case CTRL_ADDED -> {
-                if(inCtrlRange && !changed.equals(this.pos)) touched = neighborControllers.add(changed);
+                if(inCtrlRange && !changed.equals(this.pos) && isControllerOwnedByController(serverWorld, changed))
+                    touched = neighborControllers.add(changed);
             }
             case CTRL_REMOVED -> {
                 if(neighborControllers.remove(changed)) touched = true;
@@ -126,6 +128,20 @@ public class PylonControllerBlockEntity extends BlockEntity implements OwnablePy
                 ctrl.nextRebuildTick = serverWorld.getTime() + REBUILD_DEBOUNCE_TICKS;
             }
         }
+    }
+
+    private boolean isPylonOwnedByController(ServerWorld world, BlockPos pylonPos) {
+        if(owner == null || !world.isChunkLoaded(pylonPos)) return false;
+        BlockEntity blockEntity = world.getBlockEntity(pylonPos);
+        if(!(blockEntity instanceof PylonBlockEntity pylonBe)) return false;
+        return Objects.equals(owner, pylonBe.getOwner());
+    }
+
+    private boolean isControllerOwnedByController(ServerWorld world, BlockPos controllerPos) {
+        if(owner == null || !world.isChunkLoaded(controllerPos)) return false;
+        BlockEntity blockEntity = world.getBlockEntity(controllerPos);
+        if(!(blockEntity instanceof PylonBlockEntity ctrl)) return false;
+        return Objects.equals(owner, ctrl.getOwner());
     }
 
     private static UUID uuidFromPos(ServerWorld world, BlockPos pos) {

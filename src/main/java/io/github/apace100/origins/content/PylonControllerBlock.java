@@ -39,21 +39,19 @@ public class PylonControllerBlock extends BlockWithEntity {
     public void onPlaced(World world, BlockPos pos, BlockState state, LivingEntity placer, ItemStack stack) {
         super.onPlaced(world, pos, state, placer, stack);
         if(!world.isClient && world instanceof ServerWorld serverWorld) {
+            BlockEntity be = world.getBlockEntity(pos);
+            if(be instanceof OwnablePylon ownable) {
+                if(placer instanceof ServerPlayerEntity player && PylonPermissions.canOwnPylons(player)) {
+                    ownable.setOwner(player.getUuid());
+                } else {
+                    ownable.setOwner(null);
+                }
+            }
+
             PylonControllerState.get(serverWorld).add(pos);
             PylonControllerState.notifyControllerChanged(serverWorld, pos, true, PylonControllerBlockEntity.LINK_RADIUS);
 
             PlayerPylonDataCache.updatePlayersInWorld(serverWorld);
-
-            BlockEntity be = world.getBlockEntity(pos);
-            if(placer instanceof ServerPlayerEntity player) {
-                if(be instanceof OwnablePylon ownable) {
-                    if(PylonPermissions.canOwnPylons(player)) {
-                        ownable.setOwner(player.getUuid());
-                    } else {
-                        ownable.setOwner(null);
-                    }
-                }
-            }
         }
     }
 
