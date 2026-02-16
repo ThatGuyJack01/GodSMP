@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
 public class PylonCommand {
     public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
         dispatcher.register(CommandManager.literal("pylon")
-                .requires(source -> source.hasPermissionLevel(2))
+                .requires(source -> source.getEntity() instanceof ServerPlayerEntity player && PylonPermissions.canOwnPylons(player))
                 .then(CommandManager.literal("list")
                     .then(CommandManager.literal("pylons")
                         .executes(ctx -> listPylons(ctx, ListType.PYLON))
@@ -55,9 +55,6 @@ public class PylonCommand {
                             ctx.getSource().sendFeedback(() -> Text.literal("Pylon view is " + (mode == PylonVisualizer.VisualizeMode.NEAREST_HULL ? "ON" : "OFF")), false);
                             return 1;
                         })
-                )
-                .then(CommandManager.literal("testinside")
-                        .executes(PylonCommand::testInside)
                 )
                 .then(CommandManager.literal("mode")
                         .then(CommandManager.argument("mode", StringArgumentType.word())
