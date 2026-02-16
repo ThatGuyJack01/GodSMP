@@ -1,10 +1,10 @@
 package io.github.apace100.origins.content;
 
-import io.github.apace100.origins.Origins;
 import io.github.apace100.origins.content.pylon.OwnablePylon;
 import io.github.apace100.origins.content.pylon.PylonControllerState;
 import io.github.apace100.origins.content.pylon.PylonPermissions;
 import io.github.apace100.origins.content.pylon.PylonState;
+import io.github.apace100.origins.power.OriginsPowerTypes;
 import io.github.apace100.origins.util.PlayerPylonDataCache;
 import net.minecraft.block.BlockRenderType;
 import net.minecraft.block.BlockState;

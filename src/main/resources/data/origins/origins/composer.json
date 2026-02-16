@@ -4,7 +4,8 @@
 	},
 	"powers": [
       "origins:portable_jukebox",
-      "origins:music_aura"
+      "origins:music_aura",
+      "origins:can_own_pylons"
 	],
 	"order": 6,
 	"impact": 1

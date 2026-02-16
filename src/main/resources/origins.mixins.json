@@ -6,6 +6,7 @@
   "mixins": [
     "ArgumentTypesMixin",
     "ConduitOnLandMixin",
+    "CraftingResultSlotMixin",
     "EntityMoveWallMixin",
     "JukeboxBlockEntityMixin",
     "LikeWaterMixin",

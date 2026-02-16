@@ -5,7 +5,6 @@ import io.github.apace100.apoli.power.PowerTypeReference;
 import io.github.apace100.apoli.power.factory.PowerFactory;
 import io.github.apace100.apoli.registry.ApoliRegistries;
 import io.github.apace100.origins.Origins;
-import io.github.apace100.origins.power.PortableJukeboxPower;
 import net.minecraft.registry.Registry;
 
 public class OriginsPowerTypes {
@@ -19,6 +18,7 @@ public class OriginsPowerTypes {
     public static final PowerType<?> CONDUIT_POWER_ON_LAND = new PowerTypeReference<>(Origins.identifier("conduit_power_on_land"));
     public static final PowerType<PortableJukeboxPower> PORTABLE_JUKEBOX = new PowerTypeReference<>(Origins.identifier("portable_jukebox"));
     public static final PowerType<PortableJukeboxPower> MUSIC_AURA = new PowerTypeReference<>(MusicAuraPower.ID);
+    public static final PowerType<?> CAN_OWN_PYLONS = new PowerTypeReference<>(Origins.identifier("can_own_pylons"));
 
     public static void register() {
         register(OriginsCallbackPower.createFactory());

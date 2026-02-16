@@ -3,6 +3,7 @@ package io.github.apace100.origins.content;
 import io.github.apace100.origins.content.pylon.OwnablePylon;
 import io.github.apace100.origins.content.pylon.PylonControllerState;
 import io.github.apace100.origins.content.pylon.PylonPermissions;
+import io.github.apace100.origins.power.OriginsPowerTypes;
 import io.github.apace100.origins.util.PlayerPylonDataCache;
 import net.minecraft.block.BlockRenderType;
 import net.minecraft.block.BlockState;
@@ -18,8 +19,6 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 import org.jetbrains.annotations.Nullable;
-
-import javax.swing.*;
 
 public class PylonControllerBlock extends BlockWithEntity {
     public PylonControllerBlock(Settings settings) {
