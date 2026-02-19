@@ -11,6 +11,11 @@ import io.github.apace100.calio.resource.OrderedResourceListenerInitializer;
 import io.github.apace100.calio.resource.OrderedResourceListenerManager;
 import io.github.apace100.origins.badge.BadgeManager;
 import io.github.apace100.origins.command.OriginCommand;
+import io.github.apace100.origins.command.PylonCommand;
+import io.github.apace100.origins.content.pylon.PylonControllerState;
+import io.github.apace100.origins.content.pylon.PylonState;
+import io.github.apace100.origins.music.DiscRules;
+import io.github.apace100.origins.music.MusicAuraManager;
 import io.github.apace100.origins.networking.ModPacketsC2S;
 import io.github.apace100.origins.origin.Origin;
 import io.github.apace100.origins.origin.OriginLayers;
@@ -18,6 +23,7 @@ import io.github.apace100.origins.origin.OriginManager;
 import io.github.apace100.origins.power.OriginsEntityConditions;
 import io.github.apace100.origins.power.OriginsPowerTypes;
 import io.github.apace100.origins.registry.*;
+import io.github.apace100.origins.server.PylonVisualizer;
 import io.github.apace100.origins.util.*;
 import me.shedaniel.autoconfig.AutoConfig;
 import me.shedaniel.autoconfig.ConfigData;
@@ -25,6 +31,8 @@ import me.shedaniel.autoconfig.annotation.Config;
 import me.shedaniel.autoconfig.serializer.ConfigSerializer;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.fabricmc.fabric.api.entity.event.v1.ServerEntityWorldChangeEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.resource.IdentifiableResourceReloadListener;
@@ -34,6 +42,8 @@ import net.minecraft.item.ItemGroups;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.Registry;
 import net.minecraft.resource.ResourceType;
+import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.JsonHelper;
 import org.apache.logging.log4j.LogManager;
@@ -81,6 +91,7 @@ public class Origins implements ModInitializer, OrderedResourceListenerInitializ
 		OriginsEntityConditions.register();
 
 		ModBlocks.register();
+        ModBlockEntities.register();
 		ModItems.register();
 		ModTags.register();
 		ModPacketsC2S.register();
@@ -88,13 +99,38 @@ public class Origins implements ModInitializer, OrderedResourceListenerInitializ
 		ModEntities.register();
 		ModLoot.registerLootTables();
 		ModComponents.register();
+        DiscRules.bootstrap();
 		Origin.init();
+        PylonVisualizer.initServerHooks();
 
-		CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> OriginCommand.register(dispatcher));
+		CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
+            OriginCommand.register(dispatcher);
+            PylonCommand.register(dispatcher);
+
+        });
 		ItemGroupEvents.modifyEntriesEvent(ItemGroups.TOOLS).register((content) -> content.add(ModItems.ORB_OF_ORIGIN));
 
 		Criteria.register(ChoseOriginCriterion.ID.toString(), ChoseOriginCriterion.INSTANCE);
+        ServerTickEvents.END_SERVER_TICK.register(MusicAuraManager::tick);
 		Registry.register(Registries.LOOT_CONDITION_TYPE, identifier("origin"), OriginLootCondition.TYPE);
+
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
+            ServerPlayerEntity player = handler.getPlayer();
+            ServerWorld world = player.getServerWorld();
+
+            PylonState pylons = PylonState.get(world);
+            PylonControllerState controllers = PylonControllerState.get(world);
+
+            PlayerPylonDataCache.updateAndSyncCache(player, pylons, controllers);
+        });
+
+        ServerEntityWorldChangeEvents.AFTER_PLAYER_CHANGE_WORLD.register((player, origin, destination) -> {
+            PylonState pylons = PylonState.get(destination);
+            PylonControllerState controllers = PylonControllerState.get(destination);
+
+            PlayerPylonDataCache.updateAndSyncCache(player, pylons, controllers);
+        });
+
 
 		ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> ModComponents.ORIGIN.get(handler.player).selectingOrigin(false));
     }

@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "ingredients": [
+    {
+      "item": "minecraft:coarse_dirt"
+    }
+  ],
+  "result": {
+    "item": "origins:pylon_controller",
+    "count": 1
+  }
+}

@@ -19,8 +19,13 @@ public class PortableJukeboxSlot extends Slot {
         this.player = player;
     }
 
+    private boolean isCreative() {
+        return player.getAbilities().creativeMode;
+    }
+
     @Override
     public boolean canInsert(ItemStack stack) {
+        if(isCreative()) return false;
         return stack.isEmpty() || stack.isIn(ItemTags.MUSIC_DISCS);
     }
 
@@ -31,6 +36,7 @@ public class PortableJukeboxSlot extends Slot {
 
     @Override
     public boolean isEnabled() {
+        if(isCreative()) return false;
         return PowerHolderComponent.KEY.get(player).hasPower(OriginsPowerTypes.PORTABLE_JUKEBOX);
     }
 }

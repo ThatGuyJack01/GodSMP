@@ -18,5 +18,6 @@ public class ModPackets {
     public static final Identifier CONFIRM_ORIGIN = ConfirmOriginS2CPacket.TYPE.getId();
     public static final Identifier PLAYER_LANDED = Origins.identifier("player_landed");
     public static final Identifier BADGE_LIST = Origins.identifier("badge_list");
-
+    public static final Identifier PYLON_LINES = Origins.identifier("pylon_lines");
+    public static final Identifier PYLON_SYNC_DATA = Origins.identifier("pylon_sync_data");
 }

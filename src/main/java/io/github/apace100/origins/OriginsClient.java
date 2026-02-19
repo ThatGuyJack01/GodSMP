@@ -2,7 +2,9 @@ package io.github.apace100.origins;
 
 import io.github.apace100.apoli.ApoliClient;
 import io.github.apace100.apoli.integration.PowerClearCallback;
+import io.github.apace100.origins.client.PylonRenderClient;
 import io.github.apace100.origins.component.OriginComponent;
+import io.github.apace100.origins.networking.ModPackets;
 import io.github.apace100.origins.networking.ModPacketsS2C;
 import io.github.apace100.origins.origin.Origin;
 import io.github.apace100.origins.registry.ModBlocks;
@@ -40,6 +42,7 @@ public class OriginsClient implements ClientModInitializer {
         EntityRendererRegistry.register(ModEntities.ENDERIAN_PEARL, FlyingItemEntityRenderer::new);
 
         ModPacketsS2C.register();
+        PylonRenderClient.init(ModPackets.PYLON_LINES);
 
         usePrimaryActivePowerKeybind = new KeyBinding("key.origins.primary_active", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_G, "category." + Origins.MODID);
         useSecondaryActivePowerKeybind = new KeyBinding("key.origins.secondary_active", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_UNKNOWN, "category." + Origins.MODID);

@@ -1,6 +1,8 @@
 package io.github.apace100.origins.mixin;
 
+import io.github.apace100.apoli.component.PowerHolderComponent;
 import io.github.apace100.origins.inventory.PortableJukeboxSlot;
+import io.github.apace100.origins.power.PortableJukeboxPower;
 import io.github.apace100.origins.registry.ModComponents;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.PlayerInventory;
@@ -32,6 +34,10 @@ public abstract class PlayerScreenHandlerMixin extends ScreenHandler {
 
     @Inject(method = "quickMove", at = @At("HEAD"), cancellable = true)
     private void origins$transferPortableJukebox(PlayerEntity player, int slotIndex, CallbackInfoReturnable<ItemStack> cir) {
+        if(player.getAbilities().creativeMode) return;
+
+        if(!PowerHolderComponent.hasPower(player, PortableJukeboxPower.class)) return;
+
         Slot slot = this.slots.get(slotIndex);
         if (!slot.hasStack()) {
             return;
