@@ -44,7 +44,7 @@ public class PylonCommand {
                                 .executes(ctx -> {
                                     var p = ctx.getSource().getPlayer();
                                     boolean on = BoolArgumentType.getBool(ctx, "enabled");
-                                    PylonVisualizer.setView(p, on);  // maps to NEAREST_HULL or OFF
+                                    PylonVisualizer.setView(p, on);
                                     ctx.getSource().sendFeedback(() -> Text.literal("Pylon view: " + (on ? "ON (nearest hull)" : "OFF")), false);
                                     return 1;
                                 })
